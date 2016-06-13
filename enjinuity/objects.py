@@ -232,7 +232,7 @@ class Poll(FObject):
 
         numoptions = len(res_list)
         row = [
-            self.pid,
+            self.id,
             tid,
             '',
             optime,
