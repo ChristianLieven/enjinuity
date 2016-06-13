@@ -1,15 +1,26 @@
 # enjinuity
-*enjinuity* provides a way for Enjin communities to export their forum to a
-number of other self-hosted forum software in order to migrate away from Enjin.
+Exports Enjin forums to other forum software using Selenium to scrape and parse
+each page.
 
-## Supported forums
+## Supported
+
+### Forums
 * MyBB
+* phpBB
+
+### Databases
+* MySQL
+* Postgres
 
 ## Prerequisites
+
+### Required
 * Python 3
 * lxml
 * Selenium
-* Psycopg2 or PyMySql
+
+### Optional
+* Psycopg2/PyMySql
 
 ## Install
 
@@ -20,7 +31,7 @@ For a full example script, please see [bin/run_enjinuity](bin/run_enjinuity).
 short and succint API docs here
 
 ## Contributing
-pls helb make phpbb and vb and ipb and other forums work?!
+pls helb make vb and ipb and other forums work?!
 
 ## Authors
 David H. Wei  
