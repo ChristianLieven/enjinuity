@@ -179,6 +179,87 @@ class FObject:
     def get_id(self):
         return self.id
 
+class Poll(FObject):
+    pid = 1
+    def __init__(self, elem, parent):
+        super().__init__(Poll.pid, parent)
+        Poll.pid += 1
+        polls_title = elem.find_elements_by_xpath(
+          '//div[contains(@class, "answer-title")]')       
+        polls_votes = elem.find_elements_by_xpath(
+          '//span[contains(@class, "text-alter")]')
+        polls_votes.pop()
+        self.poll_total_voters = int(elem.find_element_by_xpath(
+            './/div[@class="number-votes"]').get_attribute(
+              'innerHTML').split("span>")[1].strip())
+        poll_option_type = elem.find_element_by_xpath(
+            './div[2]/form/div[1]/div[1]/input').get_attribute('type')
+        self.multiple = 0
+        self.results = []
+        
+        if poll_option_type == "checkbox":
+            self.multiple=1
+               
+        for title, votes in zip(polls_title,polls_votes):    
+            self.results.append((title.get_attribute('innerHTML'),
+                                 votes.get_attribute('innerHTML').split(' ')[0]))
+    
+    
+    def do_dump_mybb(self,db):
+        table, row = self.format_mybb()
+        db[table].append(row)
+               
+    
+            
+    def format_mybb(self):
+        tid = self.parent.get_id()
+        optime = self.parent.get_optime()
+        
+        #Create option string
+        res_list = [x[0] for x in self.results]
+        options = res_list[0];
+        for opt in res_list[1:]:
+             options = options + "||~|~||" + opt
+             
+        #Create votes string     
+        vote_list = [x[1] for x in self.results]
+        votes = vote_list[0]
+        numvotes = vote_list[0]
+        for vote in vote_list[1:]:
+            numvotes = numvotes + vote
+            votes = votes + "||~|~||" + vote 
+        
+        #Set maxoptions, unlimited options if multiple choice
+        maxoptions = 1
+        if self.multiple == 1:
+            maxoptions = 0
+        
+        numoptions = len(res_list)
+        
+        
+        row = [
+            self.pid,
+            tid, 
+            '',
+            optime,
+            options,
+            votes,
+            numoptions,
+            self.poll_total_voters,
+            0,
+            0,
+            self.multiple,
+            0,
+            maxoptions
+        ]
+        return ('polls', row)    
+    
+    def format_phpbb(self):
+        raise NotImplementedError   
+    
+    def get_pid(self):
+        return Poll.pid
+
 
 class Post(FObject):
     pid = 1
@@ -269,7 +350,18 @@ class Thread(FObject):
         reply_cnt = posts_elem.find_element_by_xpath(
           'div[1]/div[@class="text-right"]').text.split(' ')[0]
 
-        # TODO Polls
+        self.poll = 0
+          
+        try:
+            poll_block = browser.find_element_by_xpath(
+                ('.//td[2]/div[@class="post-wrapper"]'+
+                  '/div[@class="post-poll-area"]'))                                          
+            poll_child = Poll(poll_block, self)
+            self.poll = poll_child.get_pid()
+            self.children.append(poll_child)
+        except NoSuchElementException:
+            pass 
+
         flags = posts_elem.find_element_by_xpath(
           'div[1]/div[3]/span/div[1]/div[1]').get_attribute('class').split(' ')
         self.is_sticky = 1 if 'sticky' in flags else 0
@@ -340,7 +432,7 @@ class Thread(FObject):
             self.subject,
             0,              # prefix
             0,              # icon
-            0,              # poll
+            self.poll,              # poll
             self.opuid,
             self.opauthor,
             self.optime,
