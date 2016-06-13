@@ -12,17 +12,19 @@ each page.
 * MySQL
 * Postgres
 
-## Prerequisites
+## Install
 
-### Required
+### Prerequisites
 * Python 3
 * lxml
 * Selenium
 
-### Optional
-* Psycopg2/PyMySql
+#### Optional
+* Psycopg2 or PyMySql
 
-## Install
+1. Do this first
+2. Then this...
+3. Finally this!
 
 ## Usage
 For a full example script, please see [bin/run_enjinuity](bin/run_enjinuity).
