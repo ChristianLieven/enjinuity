@@ -363,8 +363,6 @@ class Thread(FObject):
 
         self.subject = posts_elem.find_element_by_xpath(
           'div[1]/div[3]/span/h1').text
-        print(self.subject)
-        print(self.is_sticky, self.is_locked)
 
         posts = posts_elem.find_elements_by_xpath(
           'div[2]//tr[contains(@class, "row")]')
