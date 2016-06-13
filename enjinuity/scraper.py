@@ -96,7 +96,7 @@ class Scraper:
         raise ValueError('Could not find category {}'.format(category))
 
     def dump_mybb(self, filename):
-        for table in ['forums', 'threads', 'posts']:
+        for table in ['forums', 'threads', 'posts', 'polls']:
             self.db[table] = []
         for child in self.children:
             child.do_dump_mybb(self.db)
