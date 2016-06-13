@@ -179,6 +179,7 @@ class FObject:
     def get_id(self):
         return self.id
 
+
 class Poll(FObject):
     pid = 1
 
@@ -269,6 +270,11 @@ class Post(FObject):
         time_list = time_elem.text.split(' · ')
 
         self.posttime = int(get_datetime(time_list[0]).timestamp())
+        # Ensure proper ordering if posts end up with the same or
+        # smaller timestamp
+        prev_posttime = self.parent.get_prev_posttime()
+        if self.posttime <= prev_posttime:
+            self.posttime = prev_posttime + 1
 
         # NOTE Enjin does not store the editor of a post, assume it's
         #      the poster
@@ -405,6 +411,12 @@ class Thread(FObject):
 
     def get_optime(self):
         return self.optime
+
+    def get_prev_posttime(self):
+        try:
+            return self.children[-1].get_posttime()
+        except IndexError:
+            return 0
 
     def mybb_replyto(self, post):
         if post is self.children[0]:
