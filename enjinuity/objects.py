@@ -181,63 +181,62 @@ class FObject:
 
 class Poll(FObject):
     pid = 1
+
     def __init__(self, elem, parent):
         super().__init__(Poll.pid, parent)
         Poll.pid += 1
         polls_title = elem.find_elements_by_xpath(
-          '//div[contains(@class, "answer-title")]')       
+          './/div[contains(@class, "answer-title")]')
         polls_votes = elem.find_elements_by_xpath(
-          '//span[contains(@class, "text-alter")]')
+          './/span[contains(@class, "text-alter")]')
         polls_votes.pop()
         self.poll_total_voters = int(elem.find_element_by_xpath(
-            './/div[@class="number-votes"]').get_attribute(
-              'innerHTML').split("span>")[1].strip())
+          './/div[@class="number-votes"]').get_attribute(
+          'innerHTML').split("span>")[1].strip())
         poll_option_type = elem.find_element_by_xpath(
-            './div[2]/form/div[1]/div[1]/input').get_attribute('type')
+          'div[2]/form/div[1]/div[1]/input').get_attribute('type')
         self.multiple = 0
         self.results = []
-        
+
         if poll_option_type == "checkbox":
-            self.multiple=1
-               
-        for title, votes in zip(polls_title,polls_votes):    
-            self.results.append((title.get_attribute('innerHTML'),
-              votes.get_attribute('innerHTML').split(' ')[0]))
-    
-    
+            self.multiple = 1
+
+        for title, votes in zip(polls_title, polls_votes):
+            self.results.append(
+                (title.get_attribute('innerHTML'),
+                 votes.get_attribute('innerHTML').split(' ')[0]))
+
     def do_dump_mybb(self,db):
         table, row = self.format_mybb()
         db[table].append(row)
-               
+
     def format_mybb(self):
         tid = self.parent.get_id()
         optime = self.parent.get_optime()
-        
+
         #Create option string
         res_list = [x[0] for x in self.results]
-        options = res_list[0];
+        options = res_list[0]
         for opt in res_list[1:]:
              options = options + "||~|~||" + opt
-             
-        #Create votes string     
+
+        #Create votes string
         vote_list = [x[1] for x in self.results]
         votes = vote_list[0]
         numvotes = vote_list[0]
         for vote in vote_list[1:]:
             numvotes = numvotes + vote
-            votes = votes + "||~|~||" + vote 
-        
+            votes = votes + "||~|~||" + vote
+
         #Set maxoptions, unlimited options if multiple choice
         maxoptions = 1
         if self.multiple == 1:
             maxoptions = 0
-        
+
         numoptions = len(res_list)
-        
-        
         row = [
             self.pid,
-            tid, 
+            tid,
             '',
             optime,
             options,
@@ -250,13 +249,10 @@ class Poll(FObject):
             0,
             maxoptions
         ]
-        return ('polls', row)    
-    
+        return ('polls', row)
+
     def format_phpbb(self):
-        raise NotImplementedError   
-    
-    def get_pid(self):
-        return Poll.pid
+        raise NotImplementedError
 
 
 class Post(FObject):
@@ -349,16 +345,15 @@ class Thread(FObject):
           'div[1]/div[@class="text-right"]').text.split(' ')[0]
 
         self.poll = 0
-          
         try:
             poll_block = browser.find_element_by_xpath(
-                ('.//td[2]/div[@class="post-wrapper"]'+
-                  '/div[@class="post-poll-area"]'))                                          
+              ('.//td[2]/div[@class="post-wrapper"]'
+               '/div[@class="post-poll-area"]'))
             poll_child = Poll(poll_block, self)
-            self.poll = poll_child.get_pid()
+            self.poll = poll_child.get_id()
             self.children.append(poll_child)
         except NoSuchElementException:
-            pass 
+            pass
 
         flags = posts_elem.find_element_by_xpath(
           'div[1]/div[3]/span/div[1]/div[1]').get_attribute('class').split(' ')
@@ -409,10 +404,10 @@ class Thread(FObject):
         self.lptime = lp.get_posttime()
         self.lpauthor = lp.get_author()
         self.lpuid = lp.get_uid()
-    
+
     def get_optime(self):
-        return self.optime 
-    
+        return self.optime
+
     def mybb_replyto(self, post):
         if post is self.children[0]:
             return 0
