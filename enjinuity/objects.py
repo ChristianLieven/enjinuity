@@ -202,15 +202,13 @@ class Poll(FObject):
                
         for title, votes in zip(polls_title,polls_votes):    
             self.results.append((title.get_attribute('innerHTML'),
-                                 votes.get_attribute('innerHTML').split(' ')[0]))
+              votes.get_attribute('innerHTML').split(' ')[0]))
     
     
     def do_dump_mybb(self,db):
         table, row = self.format_mybb()
         db[table].append(row)
                
-    
-            
     def format_mybb(self):
         tid = self.parent.get_id()
         optime = self.parent.get_optime()
@@ -411,7 +409,10 @@ class Thread(FObject):
         self.lptime = lp.get_posttime()
         self.lpauthor = lp.get_author()
         self.lpuid = lp.get_uid()
-
+    
+    def get_optime(self):
+        return self.optime 
+    
     def mybb_replyto(self, post):
         if post is self.children[0]:
             return 0
