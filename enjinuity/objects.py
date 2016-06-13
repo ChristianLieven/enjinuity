@@ -344,14 +344,13 @@ class Thread(FObject):
         reply_cnt = posts_elem.find_element_by_xpath(
           'div[1]/div[@class="text-right"]').text.split(' ')[0]
 
-        self.poll = 0
+        # Check for polls
+        self.poll = None
         try:
             poll_block = browser.find_element_by_xpath(
               ('.//td[2]/div[@class="post-wrapper"]'
                '/div[@class="post-poll-area"]'))
-            poll_child = Poll(poll_block, self)
-            self.poll = poll_child.get_id()
-            self.children.append(poll_child)
+            self.poll = Poll(poll_block, self)
         except NoSuchElementException:
             pass
 
@@ -422,13 +421,14 @@ class Thread(FObject):
 
     def format_mybb(self):
         fid = self.parent.get_id()
+        poll = self.poll.get_id() if self.poll else 0
         row = [
             self.id,        # tid
             fid,
             self.subject,
             0,              # prefix
             0,              # icon
-            self.poll,              # poll
+            poll,
             self.opuid,
             self.opauthor,
             self.optime,
