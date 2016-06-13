@@ -206,10 +206,6 @@ class Poll(FObject):
                 (title.get_attribute('innerHTML'),
                  votes.get_attribute('innerHTML').split(' ')[0]))
 
-    def do_dump_mybb(self,db):
-        table, row = self.format_mybb()
-        db[table].append(row)
-
     def format_mybb(self):
         tid = self.parent.get_id()
         optime = self.parent.get_optime()
@@ -389,6 +385,9 @@ class Thread(FObject):
                 next_posts = browser.find_elements_by_xpath(
                   ('.//div[@class="contentbox posts"]/div[2]'
                    '//tr[contains(@class, "row")]'))
+                # OP is always visible in poll threads; ignore from page 2
+                if self.poll:
+                    next_posts = next_posts[1:]
                 for p in next_posts:
                     reply = Post(p, re_subject, users, self)
                     self.children.append(reply)
@@ -416,6 +415,9 @@ class Thread(FObject):
     def do_dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
+        if self.poll:
+            table, row = self.poll.format_mybb()
+            db[table].append(row)
         for child in self.children:
             child.do_dump_mybb(db)
 
