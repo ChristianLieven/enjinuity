@@ -336,10 +336,11 @@ class Post(FObject):
 class Thread(FObject):
     tid = 1
 
-    def __init__(self, views, url, browser, users, parent):
+    def __init__(self, views, sticky, url, browser, users, parent):
         super().__init__(Thread.tid, parent)
         Thread.tid += 1
         self.views = views
+        self.is_sticky = sticky
         browser.get(url)
         posts_elem = browser.find_element_by_xpath(
           './/div[@class="contentbox posts"]')
@@ -358,11 +359,12 @@ class Thread(FObject):
 
         flags = posts_elem.find_element_by_xpath(
           'div[1]/div[3]/span/div[1]/div[1]').get_attribute('class').split(' ')
-        self.is_sticky = 1 if 'sticky' in flags else 0
         self.is_locked = 1 if 'locked' in flags else 0
 
         self.subject = posts_elem.find_element_by_xpath(
           'div[1]/div[3]/span/h1').text
+        print(self.subject)
+        print(self.is_sticky, self.is_locked)
 
         posts = posts_elem.find_elements_by_xpath(
           'div[2]//tr[contains(@class, "row")]')
@@ -482,6 +484,8 @@ class Forum(FObject):
         if urlparse(url).hostname.split('.')[-2] != 'enjin':
             self.linkto = url
             return
+        self.children.extend([[], []])
+        self.children_to_get.extend([[], []])
         browser.get(url)
         body = browser.find_element_by_tag_name('body')
 
@@ -515,6 +519,8 @@ class Forum(FObject):
         except NoSuchElementException:
             pass
 
+        assert int(nr_threads) == len(self.children_to_get[1])
+
     def _do_init_subforums(self, body):
         subforums = body.find_elements_by_xpath(
           ('.//div[contains(@class, "contentbox") and '
@@ -524,7 +530,7 @@ class Forum(FObject):
             sf_name = sf.find_element_by_xpath('td[2]/div[1]/a')
             sf_desc = sf.find_element_by_xpath('td[2]/div[2]').text
             sf_url = sf_name.get_attribute('href')
-            self.children_to_get.append((sf_name.text, sf_desc, sf_url))
+            self.children_to_get[0].append((sf_name.text, sf_desc, sf_url))
 
     def _do_init_threads(self, body):
         threads = body.find_elements_by_xpath(
@@ -535,39 +541,37 @@ class Forum(FObject):
             # them up from their destination
             if 'moved' in t.get_attribute('class').split(' '):
                 continue
+            t_sticky = t.find_element_by_xpath('td[1]/a/div').get_attribute(
+              'class').split(' ')
+            t_sticky = 1 if 'sticky' in t_sticky else 0
             t_name = t.find_element_by_xpath(
               ('td[2]/a[contains(@class, "thread-view") and '
                        'contains(@class, "thread-subject")]'))
             t_url = t_name.get_attribute('href')
             t_views = t.find_element_by_xpath(
               ('td[contains(@class, "views")]')).text
-            self.children_to_get.append((t_views, t_url))
+            self.children_to_get[1].append((t_views, t_sticky, t_url))
 
     def get_parentlist(self):
         return self.parentlist
 
     def get_children(self, browser, users):
-        for child in self.children_to_get:
-            # Check if the child is a subforum or thread
-            if len(child) == 3:
-                sf_name, sf_desc, sf_url = child
-                forum = Forum(sf_name, sf_desc, sf_url, browser, self)
-                self.children.append(forum)
-            else:
-                t_views, t_url = child
-                thread = Thread(t_views, t_url, browser, users, self)
-                self.children.append(thread)
+        for child in self.children_to_get[0]:
+            sf_name, sf_desc, sf_url = child
+            forum = Forum(sf_name, sf_desc, sf_url, browser, self)
+            self.children[0].append(forum)
+        for child in self.children_to_get[1]:
+            t_views, t_sticky, t_url = child
+            thread = Thread(t_views, t_sticky, t_url, browser, users, self)
+            self.children[1].append(thread)
 
-        for child in self.children:
-            try:
-                child.get_children(browser, users)
-            except AttributeError:
-                return
+        for subforum in self.children[0]:
+            subforum.get_children(browser, users)
 
     def do_dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
-        for child in self.children:
+        for child in self.children[0] + self.children[1]:
             child.do_dump_mybb(db)
 
     def format_mybb(self):
