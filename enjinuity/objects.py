@@ -214,6 +214,29 @@ class FObject:
         return self.id
 
 
+class Pollvote(FObject):
+    vid = 1
+    def __init__(self, voteoption, parent):
+        super().__init__(Pollvote.vid, parent)
+        Pollvote.vid += 1
+        self.voteoption = voteoption
+
+    def do_dump_mybb(self, db):
+        table, row = self.format_mybb()
+        db[table].append(row)
+
+    def format_mybb(self):
+        optime = self.parent.get_optime()
+        pid = self.parent.id
+        row = [
+            self.id,
+            pid,
+            0, #guest user
+            self.voteoption,
+            optime
+        ]
+        return ('pollvotes', row)
+
 class Poll(FObject):
     pid = 1
 
