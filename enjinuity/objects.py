@@ -101,6 +101,11 @@ def bbcode_formatter(element, children):
             return ''
         elif 'user' in elem_classes:
             return ''
+        # Ignore unnecessary elements related to spoiler tags
+        elif 'spoiler-title' in elem_classes:
+            return ''
+        if 'bbcode' in elem_classes and 'spoiler' in elem_classes:
+            return "[spoiler]{}[/spoiler]".format(children)
         if 'bbcode_quote' in elem_classes:
             quotes = list(element)
             quote_head = quotes[1]
