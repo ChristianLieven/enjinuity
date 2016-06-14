@@ -502,8 +502,7 @@ class Thread(FObject):
         table, row = self.format_mybb()
         db[table].append(row)
         if self.poll:
-            table, row = self.poll.format_mybb()
-            db[table].append(row)
+            self.poll.do_dump_mybb(db)
         for child in self.children:
             child.do_dump_mybb(db)
 
