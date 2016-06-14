@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # enjinuity
 # Written in 2016 by David H. Wei <https://github.com/spikeh/>
+# and Italo Cotta <https://github.com/itcotta/>
 #
 # To the extent possible under law, the author(s) have dedicated all
 # copyright and related and neighboring rights to this software to the
@@ -15,10 +16,8 @@ import pickle
 import sys
 
 def print_usage():
-    print('Usage: write_db FILE')
-    print('Writes a dump from enjinuity to a database.')
-    print('Requires a valid \'config.json\'.')
-    print('FILE is a pickled Python dictionary of table name to list of rows to insert.')
+    print('Usage: write_db DBFILE')
+    print('Writes a forum dump DBFILE from enjinuity to a database.')
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -59,15 +58,17 @@ if __name__ == '__main__':
     conn.commit()
     if dbtype == 'pgsql':
         cur.execute('SELECT sequence_name FROM information_schema.sequences;')
-        query_max = 'SELECT MAX(%s) FROM %s;'
-        query_as = 'ALTER SEQUENCE %s RESTART WITH %s;'
+        query_max = 'SELECT MAX({}) FROM {};'
+        query_as = 'ALTER SEQUENCE {} RESTART WITH {:d};'
         cur2 = conn.cursor()
         for seq in cur:
             seqlst = seq[0].split('_')
             table = seqlst[0] if len(seqlst) == 3 else seqlst[0] + seqlst[1]
             pkey = seqlst[-2]
-            max_pkey = cur2.execute(query_max, (pkey, table)).fetchone()[0]
-            cur2.execute(query_as, (seq[0], max_pkey + 1))
+            cur2.execute(query_max.format(pkey, table))
+            max_pkey = cur2.fetchone()[0]
+            if max_pkey:
+                cur2.execute(query_as.format(seq[0], max_pkey + 1))
         conn.commit()
         cur2.close()
     cur.close()
