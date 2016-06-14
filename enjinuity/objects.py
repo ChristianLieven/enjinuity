@@ -259,6 +259,16 @@ class Poll(FObject):
         if poll_option_type == "checkbox":
             self.multiple = 1
 
+        voteindex = 1
+        for titles, votes in zip(polls_title, polls_votes):
+            vote = votes.get_attribute('innerHTML').split(' ')[0]
+            title = titles.get_attribute('innerHTML')
+            self.results.append((title,vote))
+            for itr in range(1,int(vote)+1):
+                pv = Pollvote(voteindex,self)
+                self.children.append(pv)
+            voteindex += 1
+
         for title, votes in zip(polls_title, polls_votes):
             self.results.append(
                 (title.get_attribute('innerHTML'),
