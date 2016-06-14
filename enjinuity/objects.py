@@ -40,11 +40,12 @@ fontpx_map = {
 
 def bbcode_formatter(element, children):
     if element.tag == 'br':
-        return '\r'.rstrip()
+        return '\r'
     if element.tag == 'a':
         if children:
-            return "[url={link}]{text}[/url]".format(link=element.get('href'),
-                                                     text=children)
+            url = element.get('href')
+            return "[url={link}]{text}[/url]".format(link=url, text=children)
+        # Empty link
         else:
             return ''
     if element.tag == 'img':
@@ -92,12 +93,25 @@ def bbcode_formatter(element, children):
     if element.tag == 'strike':
         return "[s]{text}[/s]".format(text=children)
     if element.tag == 'div':
+        elem_classes = element.get('class').split(' ')
+        # Ignore some unnecessary elements related to quote parsing
+        if 'bbcode_quote_decorator' in elem_classes:
+            return ''
+        elif 'element_avatar' in elem_classes:
+            return ''
+        elif 'user' in elem_classes:
+            return ''
+        if 'bbcode_quote' in elem_classes:
+            quotes = list(element)
+            quote_who = quotes[1].find('div[2]/a').text
+            quote_txt = children.split('wrote:')[-1].strip()
+            return "[quote='{}']\r{}\r[/quote]\r\r".format(quote_who, quote_txt)
         if element.get('style') == 'text-align:center':
-            return "[align=center]{text}[align]".format(text=children)
+            return "[align=center]{text}[/align]".format(text=children)
         elif element.get('style') == 'text-align:left':
-            return "[align=left]{text}[align]".format(text=children)
+            return "[align=left]{text}[/align]".format(text=children)
         elif element.get('style') == 'text-align:right':
-            return "[align=right]{text}[align]".format(text=children)
+            return "[align=right]{text}[/align]".format(text=children)
     if children:
         return children.rstrip()
 
