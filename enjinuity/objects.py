@@ -283,7 +283,7 @@ class Poll(FObject):
 
     def format_mybb(self):
         tid = self.parent.get_id()
-        optime = self.parent.get_optime()
+        optime = self.get_optime()
 
         #Create option string
         res_list = [x[0] for x in self.results]
