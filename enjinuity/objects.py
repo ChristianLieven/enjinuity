@@ -147,7 +147,10 @@ weekday_map = {
 
 def get_datetime(string):
     match = re.search(r'(?:^Posted|^Last edited) ([\w\s,:]*)', string)
-    timestr = match.group(1)
+    if match:
+        timestr = match.group(1)
+    else:
+        timestr = string
     match = re.search(r'\s\d\d$', timestr)
     # Jan 23, 15
     if match:
