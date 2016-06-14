@@ -114,7 +114,7 @@ def bbcode_formatter(element, children):
             if who is not None:
                 who = who.text
                 txt = children.split('wrote:')[-1]
-                return "[quote='{}']\\r{}\\r[/quote]\\r\\r".format(who, txt)
+                return "[quote='{}']\r{}\r[/quote]\r\r".format(who, txt)
             else:
                 child_split = children.strip().split('wrote:')
                 child_split = [x.strip() for x in child_split]
@@ -122,10 +122,10 @@ def bbcode_formatter(element, children):
                 if child_split[0] and child_split[1]:
                     who = child_split[0]
                     txt = child_split[1]
-                    return "[quote='{}']\\r{}\\r[/quote]\\r\\r".format(who, txt)
+                    return "[quote='{}']\r{}\r[/quote]\r\r".format(who, txt)
                 else:
                     txt = ''.join(child_split)
-                    return "[quote]\\r{}\\r[/quote]\\r\\r".format(txt)
+                    return "[quote]\r{}\r[/quote]\r\r".format(txt)
         if element.get('style') == 'text-align:center':
             return "[align=center]{text}[/align]".format(text=children)
         elif element.get('style') == 'text-align:left':
