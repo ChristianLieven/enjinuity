@@ -269,10 +269,11 @@ class Poll(FObject):
                 self.children.append(pv)
             voteindex += 1
 
-        for title, votes in zip(polls_title, polls_votes):
-            self.results.append(
-                (title.get_attribute('innerHTML'),
-                 votes.get_attribute('innerHTML').split(' ')[0]))
+    def get_pid(self):
+        return self.id
+
+    def get_optime(self):
+        return self.parent.get_optime()
 
     def format_mybb(self):
         tid = self.parent.get_id()
