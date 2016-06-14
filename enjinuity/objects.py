@@ -94,7 +94,7 @@ def bbcode_formatter(element, children):
         return "[s]{text}[/s]".format(text=children)
     if element.tag == 'div':
         elem_classes = element.get('class').split(' ')
-        # Ignore some unnecessary elements related to quote parsing
+        # Ignore unnecessary elements related to quote parsing
         if 'bbcode_quote_decorator' in elem_classes:
             return ''
         elif 'element_avatar' in elem_classes:
@@ -103,9 +103,24 @@ def bbcode_formatter(element, children):
             return ''
         if 'bbcode_quote' in elem_classes:
             quotes = list(element)
-            quote_who = quotes[1].find('div[2]/a').text
-            quote_txt = children.split('wrote:')[-1].strip()
-            return "[quote='{}']\r{}\r[/quote]\r\r".format(quote_who, quote_txt)
+            quote_head = quotes[1]
+            who = quote_head.find('div[2]/a')
+            # Properly formatted quote block, with a linked author
+            if who is not None:
+                who = who.text
+                txt = children.split('wrote:')[-1]
+                return "[quote='{}']\\r{}\\r[/quote]\\r\\r".format(who, txt)
+            else:
+                child_split = children.strip().split('wrote:')
+                child_split = [x.strip() for x in child_split]
+                # Text on both sides of 'wrote:'
+                if child_split[0] and child_split[1]:
+                    who = child_split[0]
+                    txt = child_split[1]
+                    return "[quote='{}']\\r{}\\r[/quote]\\r\\r".format(who, txt)
+                else:
+                    txt = ''.join(child_split)
+                    return "[quote]\\r{}\\r[/quote]\\r\\r".format(txt)
         if element.get('style') == 'text-align:center':
             return "[align=center]{text}[/align]".format(text=children)
         elif element.get('style') == 'text-align:left':
