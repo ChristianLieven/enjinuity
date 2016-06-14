@@ -274,6 +274,12 @@ class Poll(FObject):
 
     def get_optime(self):
         return self.parent.get_optime()
+    
+    def do_dump_mybb(self, db):
+        table, row = self.format_mybb()
+        db[table].append(row)
+        for child in self.children:
+            child.do_dump_mybb(db)    
 
     def format_mybb(self):
         tid = self.parent.get_id()
