@@ -474,6 +474,8 @@ class Forum(FObject):
 
     def __init__(self, name, desc, url, browser, parent):
         super().__init__(Forum.fid, parent)
+        self.children.extend([[], []])
+        self.children_to_get.extend([[], []])
         Forum.fid += 1
         self.name = name
         self.desc = desc
@@ -482,8 +484,6 @@ class Forum(FObject):
         if urlparse(url).hostname.split('.')[-2] != 'enjin':
             self.linkto = url
             return
-        self.children.extend([[], []])
-        self.children_to_get.extend([[], []])
         browser.get(url)
         body = browser.find_element_by_tag_name('body')
 
