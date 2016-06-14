@@ -14,6 +14,9 @@ import pickle
 import random
 import string
 import time
+from enjinuity.objects import get_datetime
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
 
 def random_string(length):
     return ''.join(random.SystemRandom().choice(string.ascii_lowercase +
@@ -25,9 +28,19 @@ def md5(string):
 
 class Users:
 
-    def __init__(self, users, email, passwd, uid):
-        with open(users, 'r') as f:
-            self.users = [u.rstrip() for u in f]
+    def __init__(self, users, email, passwd, uid, validtags):
+        try:
+            with open(users, 'r') as f:
+                self.users = [u.rstrip() for u in f]
+        except FileNotFoundError:
+            self.users = []
+            self.users_to_get = []
+            self.validtags = validtags
+            browser = webdriver.Chrome()
+            browser.get(users)
+            body = browser.find_element_by_tag_name('body')
+            self._scrape_users(body)
+            self._scrape_rep(browser)
         self.email = email
         self.passwd = passwd
         self.uid = uid
@@ -36,6 +49,39 @@ class Users:
         self.db = {}
         # Map of username->uid
         self.user_map = {}
+
+    def _scrape_users(self, elem):
+        for row in elem.find_elements_by_xpath('.//tr[@class="row"]'):
+            tags = row.find_element_by_xpath('td[contains(@class, "col-tags")]')
+            tags = [t.text for t in tags.find_elements_by_tag_name('span')]
+            if self.validtags is not None:
+                if set(tags).isdisjoint(self.validtags):
+                    continue
+            displayname = row.find_element_by_xpath(
+              'td[contains(@class, "col-displayname")]/a')
+            name = displayname.get_attribute('innerHTML')
+            joindate = row.find_element_by_xpath(
+              'td[contains(@class, "col-datejoined")]').text
+            joindate = int(get_datetime(joindate).timestamp())
+            lastseen = row.find_element_by_xpath(
+              'td[contains(@class, "col-lastseen")]').text
+            if lastseen == 'Online Now':
+                lastseen = int(time.time())
+            else:
+                lastseen = int(get_datetime(lastseen).timestamp())
+            self.users.append((name, joindate, lastseen))
+            self.users_to_get.append(displayname.get_attribute('href'))
+
+    def _scrape_rep(self, browser):
+        for i, url in enumerate(self.users_to_get):
+            browser.get(url)
+            try:
+                rep = int(browser.find_element_by_xpath(
+                  '//div[@class="widget_ministats"]/div[3]/h4').text)
+            except NoSuchElementException:
+                # User deleted account or something?
+                rep = 0
+            self.users[i] += (rep,)
 
     def get_uid(self, user):
         try:
@@ -49,18 +95,25 @@ class Users:
 
 class MyBBUsers(Users):
 
-    def __init__(self, users, email, passwd, uid):
-        super().__init__(users, email, passwd, uid)
+    def __init__(self, users, email, passwd, uid, validtags=None):
+        super().__init__(users, email, passwd, uid, validtags)
         self.db['users'] = []
         # http://docs.mybb.com/1.6/Database-Tables-mybb-users/
         for user in self.users:
+            try:
+                name, joindate, lastseen, rep = user
+            except ValueError:
+                name = user
+                joindate = int(time.time())
+                lastseen = joindate
+                rep = 0
             salt = random_string(8)
             saltedpw = md5(md5(salt) + md5(self.passwd))
             loginkey = random_string(50)
             now = int(time.time())
             self.db['users'].append([
                 self.uid,
-                user,
+                name,
                 saltedpw,
                 salt,
                 loginkey,
@@ -74,9 +127,9 @@ class MyBBUsers(Users):
                 '',         # additionalgroups
                 0,          # displaygroup
                 '',         # usertitle
-                now,        # regdate
-                now,        # lastactive
-                now,        # lastvisit
+                joindate,   # regdate
+                lastseen,   # lastactive
+                lastseen,   # lastvisit
                 0,          # lastpost
                 '',         # website
                 '',         # icq
@@ -123,7 +176,7 @@ class MyBBUsers(Users):
                 '',         # notepad
                 0,          # referrer
                 0,          # referrals
-                0,          # reputation
+                rep,        # reputation
                 '',         # regip
                 '',         # lastip
                 '',         # language
@@ -155,7 +208,7 @@ class phpBBUsers(Users):
         # Create a list of rows to insert into table 'users'
         #self.db['users'] = []
         for user in users:
-            # Create the row and insert it into the list of rows.
+            # Create each row and insert it into the list of rows.
             #self.db['users'].append([...])
             self.user_map[user] = self.uid
             self.uid += 1
