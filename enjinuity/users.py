@@ -32,7 +32,7 @@ class Users:
         try:
             with open(users, 'r') as f:
                 self.users = [u.rstrip() for u in f]
-        except FileNotFoundError:
+        except OSError:
             self.users = []
             self.users_to_get = []
             self.validtags = validtags
