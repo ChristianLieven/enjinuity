@@ -119,7 +119,7 @@ def bbcode_formatter(element, children):
                 child_split = children.strip().split('wrote:')
                 child_split = [x.strip() for x in child_split]
                 # Text on both sides of 'wrote:'
-                if child_split[0] and child_split[1]:
+                if len(child_split) == 2 and child_split[0] and child_split[1]:
                     who = child_split[0]
                     txt = child_split[1]
                     return "[quote='{}']\r{}\r[/quote]\r\r".format(who, txt)
