@@ -363,7 +363,9 @@ class Post(FObject):
 
         msg_elem = elem.find_element_by_xpath('td[2]/div[1]/div[1]')
         try:
-            tree = lxml.html.fromstring(msg_elem.get_attribute('innerHTML'))
+            tree = lxml.html.fragment_fromstring(
+                msg_elem.get_attribute('innerHTML'),
+                create_parent='div')
             self.message = parse(tree, bbcode_formatter)
         except lxml.etree.ParserError:
             self.message = ''
