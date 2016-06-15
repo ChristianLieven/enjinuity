@@ -134,6 +134,8 @@ def bbcode_formatter(element, children):
             return "[align=left]{text}[/align]".format(text=children)
         elif element.get('style') == 'text-align:right':
             return "[align=right]{text}[/align]".format(text=children)
+    if element.tag == 'hr' and element.get('class') == 'bbcode_rule' :
+        return "[hr]"
     if children:
         return children.rstrip()
 
