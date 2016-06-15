@@ -198,7 +198,7 @@ class MyBBUsers(Users):
                 '',         # usernotes
                 0           # sourceeditor
             ])
-            self.user_map[user] = self.uid
+            self.user_map[name] = self.uid
             self.uid += 1
 
 
