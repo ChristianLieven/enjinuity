@@ -94,7 +94,11 @@ def bbcode_formatter(element, children):
         return "[s]{text}[/s]".format(text=children)
     if element.tag == 'div':
         elem_classes = element.get('class').split(' ')
-        # Ignore unnecessary elements related to quote parsing
+        if 'bbcode_code_body' in elem_classes:
+            return "[code]{text}[/code]".format(text=children)
+        # Ignore unnecessary elements related to quote/code
+        if 'bbcode_code_head' in elem_classes:
+            return ''
         if 'bbcode_quote_decorator' in elem_classes:
             return ''
         elif 'element_avatar' in elem_classes:
