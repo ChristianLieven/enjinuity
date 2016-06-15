@@ -101,13 +101,13 @@ class MyBBUsers(Users):
         self.db['users'] = []
         # http://docs.mybb.com/1.6/Database-Tables-mybb-users/
         for user in self.users:
-            try:
-                name, joindate, lastseen, rep = user
-            except ValueError:
+            if isinstance(user, str):
                 name = user
                 joindate = int(time.time())
                 lastseen = joindate
                 rep = 0
+            else:
+                name, joindate, lastseen, rep = user
             salt = random_string(8)
             saltedpw = md5(md5(salt) + md5(self.passwd))
             loginkey = random_string(50)
