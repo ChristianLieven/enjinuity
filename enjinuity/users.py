@@ -41,6 +41,7 @@ class Users:
             body = browser.find_element_by_tag_name('body')
             self._scrape_users(body)
             self._scrape_rep(browser)
+            browser.quit()
         self.email = email
         self.passwd = passwd
         self.uid = uid
