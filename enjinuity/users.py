@@ -17,7 +17,7 @@ import string
 import time
 from enjinuity.objects import get_datetime
 from selenium import webdriver
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 
 def random_string(length):
     return ''.join(random.SystemRandom().choice(string.ascii_lowercase +
