@@ -29,7 +29,8 @@ def md5(string):
 
 class Users:
 
-    def __init__(self, users, email, passwd, uid, validtags):
+    def __init__(self, users, email, passwd, validtags):
+        self.uid = 2
         try:
             with open(users, 'r') as f:
                 self.users = [u.rstrip() for u in f]
@@ -46,7 +47,6 @@ class Users:
             browser.quit()
         self.email = email
         self.passwd = passwd
-        self.uid = uid
 
         # Database-specific output
         self.db = {}
@@ -100,8 +100,8 @@ class Users:
 
 class MyBBUsers(Users):
 
-    def __init__(self, users, email, passwd, uid, validtags=None):
-        super().__init__(users, email, passwd, uid, validtags)
+    def __init__(self, users, email, passwd, validtags=None):
+        super().__init__(users, email, passwd, validtags)
         self.db['users'] = []
         # http://docs.mybb.com/1.6/Database-Tables-mybb-users/
         for user in self.users:
