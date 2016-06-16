@@ -11,65 +11,63 @@
 # You should have received a copy of the CC0 Public Domain Dedication
 # along with this software. If not, see
 # <http://creativecommons.org/publicdomain/zero/1.0/>.
-import json
+import argparse
 import pickle
-import sys
 
-def print_usage():
-    print('Usage: write_db DBFILE')
-    print('Writes a forum dump DBFILE from enjinuity to a database.')
+desc = 'Insert a dump file from enjinuity into a database.'
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('dbfile', metavar='DBFILE')
+parser.add_argument('-t', choices=['pgsql', 'mysql'],
+                    required=True, help='database type', dest='dbtype')
+parser.add_argument('-a', default='localhost', help='database host address',
+                    dest='hostname')
+parser.add_argument('-u', required=True, help='database username',
+                    dest='username')
+parser.add_argument('-p', required=True, help='database password',
+                    dest='password')
+parser.add_argument('-n', required=True, help='database name', dest='dbname')
+parser.add_argument('-f', help='database table prefix', dest='tbl_prefix')
+args = parser.parse_args()
 
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print_usage()
-        sys.exit()
+if args.dbtype == 'pgsql':
+    import psycopg2
+    conn = psycopg2.connect(host=args.hostname, user=args.username,
+                            password=args.password, database=args.dbname)
+elif args.dbtype == 'mysql':
+    import pymysql
+    conn = pymysql.connect(host=args.hostname, user=args.username,
+                           password=args.password, database=args.dbname,
+                           charset='utf8')
 
-    f = open('config.json', 'r')
-    config = json.load(f)['database']
-    f.close()
+cur = conn.cursor()
+db = pickle.load(open(args.dbfile, 'rb'))
+for table, rows in db.items():
+    if len(rows) == 0:
+        continue
+    query_head = 'INSERT INTO {}{} VALUES ('.format(tbl_prefix, table)
+    query_body = ''.join(['%s, ' for _ in range(len(rows[0]) - 1)])
+    query_tail = '%s);'
+    query = query_head + query_body + query_tail
+    for row in rows:
+        cur.execute(query, row)
+conn.commit()
 
-    dbtype = config['type']
-    hostname = config['hostname']
-    username = config['username']
-    password = config['password']
-    dbname = config['dbname']
-    tbl_prefix = config['tbl_prefix']
-
-    if dbtype == 'pgsql':
-        import psycopg2
-        conn = psycopg2.connect(host=hostname, user=username, password=password,
-                                database=dbname)
-    elif dbtype == 'mysql':
-        import pymysql
-        conn = pymysql.connect(host=hostname, user=username, password=password,
-                               database=dbname, charset='utf8')
-    else:
-        raise ValueError('Unsupported database type {}'.format(dbtype))
-
-    cur = conn.cursor()
-    db = pickle.load(open(sys.argv[1], 'rb'))
-    for table, rows in db.items():
-        query_head = 'INSERT INTO {}{} VALUES ('.format(tbl_prefix, table)
-        query_body = ''.join(['%s, ' for _ in range(len(rows[0]) - 1)])
-        query_tail = '%s);'
-        query = query_head + query_body + query_tail
-        for row in rows:
-            cur.execute(query, row)
+# Update autoincremented columns
+if dbtype == 'pgsql':
+    cur.execute('SELECT sequence_name FROM information_schema.sequences;')
+    query_max = 'SELECT MAX({}) FROM {};'
+    query_as = 'ALTER SEQUENCE {} RESTART WITH {:d};'
+    cur2 = conn.cursor()
+    for seq in cur:
+        seqlst = seq[0].split('_')
+        table = seqlst[0] if len(seqlst) == 3 else seqlst[0] + seqlst[1]
+        pkey = seqlst[-2]
+        cur2.execute(query_max.format(pkey, table))
+        max_pkey = cur2.fetchone()[0]
+        if max_pkey:
+            cur2.execute(query_as.format(seq[0], max_pkey + 1))
     conn.commit()
-    if dbtype == 'pgsql':
-        cur.execute('SELECT sequence_name FROM information_schema.sequences;')
-        query_max = 'SELECT MAX({}) FROM {};'
-        query_as = 'ALTER SEQUENCE {} RESTART WITH {:d};'
-        cur2 = conn.cursor()
-        for seq in cur:
-            seqlst = seq[0].split('_')
-            table = seqlst[0] if len(seqlst) == 3 else seqlst[0] + seqlst[1]
-            pkey = seqlst[-2]
-            cur2.execute(query_max.format(pkey, table))
-            max_pkey = cur2.fetchone()[0]
-            if max_pkey:
-                cur2.execute(query_as.format(seq[0], max_pkey + 1))
-        conn.commit()
-        cur2.close()
-    cur.close()
-    conn.close()
+    cur2.close()
+
+cur.close()
+conn.close()
