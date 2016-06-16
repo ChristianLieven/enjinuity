@@ -10,13 +10,14 @@
 # along with this software. If not, see
 # <http://creativecommons.org/publicdomain/zero/1.0/>.
 import hashlib
+import lxml.html
 import pickle
 import random
 import string
 import time
 from enjinuity.objects import get_datetime
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from urllib.parse import urlparse, urljoin
 
 def random_string(length):
     return ''.join(random.SystemRandom().choice(string.ascii_lowercase +
@@ -33,14 +34,15 @@ class Users:
             with open(users, 'r') as f:
                 self.users = [u.rstrip() for u in f]
         except OSError:
+            # users is a URL, scrape instead
             self.users = []
-            self.users_to_get = []
-            self.validtags = validtags
+            users_to_get = []
             browser = webdriver.Chrome()
             browser.get(users)
-            body = browser.find_element_by_tag_name('body')
-            self._scrape_users(body)
-            self._scrape_rep(browser)
+            base_url = urljoin(users, '/')
+            page = lxml.html.fromstring(browser.page_source, base_url=base_url)
+            self._scrape_users(page, users_to_get, validtags)
+            self._scrape_rep(users_to_get, browser)
             browser.quit()
         self.email = email
         self.passwd = passwd
@@ -51,36 +53,38 @@ class Users:
         # Map of username->uid
         self.user_map = {}
 
-    def _scrape_users(self, elem):
-        for row in elem.find_elements_by_xpath('.//tr[@class="row"]'):
-            tags = row.find_element_by_xpath('td[contains(@class, "col-tags")]')
-            tags = [t.text for t in tags.find_elements_by_tag_name('span')]
-            if self.validtags is not None:
-                if set(tags).isdisjoint(self.validtags):
+    def _scrape_users(self, page, users_to_get, validtags):
+        for row in page.xpath('.//tr[@class="row"]'):
+            tags = row.xpath('td[contains(@class, "col-tags")]')
+            tags = [t.text for t in tags[0].findall('span')]
+            if validtags is not None:
+                if set(tags).isdisjoint(validtags):
                     continue
-            displayname = row.find_element_by_xpath(
-              'td[contains(@class, "col-displayname")]/a')
-            name = displayname.get_attribute('innerHTML')
-            joindate = row.find_element_by_xpath(
-              'td[contains(@class, "col-datejoined")]').text
+            displayname = row.xpath(
+              'td[contains(@class, "col-displayname")]/a')[0]
+            name = displayname.text
+            joindate = row.xpath(
+              'td[contains(@class, "col-datejoined")]')[0].text
             joindate = int(get_datetime(joindate).timestamp())
-            lastseen = row.find_element_by_xpath(
-              'td[contains(@class, "col-lastseen")]').text
+            lastseen = row.xpath(
+              'td[contains(@class, "col-lastseen")]')[0].text_content()
             if lastseen == 'Online Now':
                 lastseen = int(time.time())
             else:
                 lastseen = int(get_datetime(lastseen).timestamp())
             self.users.append((name, joindate, lastseen))
-            self.users_to_get.append(displayname.get_attribute('href'))
+            url = urljoin(page.base_url, displayname.get('href'))
+            users_to_get.append(url)
 
-    def _scrape_rep(self, browser):
-        for i, url in enumerate(self.users_to_get):
+    def _scrape_rep(self, users_to_get, browser):
+        for i, url in enumerate(users_to_get):
             browser.get(url)
+            page = lxml.html.fromstring(browser.page_source)
             try:
-                rep = int(browser.find_element_by_xpath(
-                  '//div[@class="widget_ministats"]/div[3]/h4').text)
-            except NoSuchElementException:
-                # User deleted account or something?
+                rep = int(page.xpath(
+                  '//div[@class="widget_ministats"]/div[3]/h4')[0].text)
+            except IndexError:
+                # Deleted accounts are redirected to the home page
                 rep = 0
             self.users[i] += (rep,)
 
