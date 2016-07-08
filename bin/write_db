@@ -26,7 +26,8 @@ parser.add_argument('-u', required=True, help='database username',
 parser.add_argument('-p', required=True, help='database password',
                     dest='password')
 parser.add_argument('-n', required=True, help='database name', dest='dbname')
-parser.add_argument('-f', help='database table prefix', dest='tbl_prefix')
+parser.add_argument('-f', help='database table prefix', dest='tbl_prefix',
+                    default='')
 args = parser.parse_args()
 
 if args.dbtype == 'pgsql':
@@ -44,7 +45,7 @@ db = pickle.load(open(args.dbfile, 'rb'))
 for table, rows in db.items():
     if len(rows) == 0:
         continue
-    query_head = 'INSERT INTO {}{} VALUES ('.format(tbl_prefix, table)
+    query_head = 'INSERT INTO {}{} VALUES ('.format(args.tbl_prefix, table)
     query_body = ''.join(['%s, ' for _ in range(len(rows[0]) - 1)])
     query_tail = '%s);'
     query = query_head + query_body + query_tail
@@ -53,7 +54,7 @@ for table, rows in db.items():
 conn.commit()
 
 # Update autoincremented columns
-if dbtype == 'pgsql':
+if args.dbtype == 'pgsql':
     cur.execute('SELECT sequence_name FROM information_schema.sequences;')
     query_max = 'SELECT MAX({}) FROM {};'
     query_as = 'ALTER SEQUENCE {} RESTART WITH {:d};'
