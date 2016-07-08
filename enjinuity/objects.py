@@ -10,24 +10,23 @@
 # You should have received a copy of the CC0 Public Domain Dedication
 # along with this software. If not, see
 # <http://creativecommons.org/publicdomain/zero/1.0/>.
-import lxml.etree
-import lxml.html
+import calendar
 import re
 from datetime import datetime, timedelta, timezone
-from selenium.common.exceptions import NoSuchElementException
-from urllib.parse import urlparse
+from lxml import etree, html
+from urllib.parse import urljoin, urlparse
 
 def parse(tree, func, *args, **kwargs):
     result = []
     for e in tree.xpath('child::node()'):
-        if isinstance(e, lxml.html.HtmlElement):
+        if isinstance(e, html.HtmlElement):
             children = parse(e, func, *args, **kwargs)
             child_result = func(e, children, *args, **kwargs)
             if child_result:
                 result.append(child_result)
-        elif isinstance(e, lxml.etree._ElementUnicodeResult):
+        elif isinstance(e, etree._ElementUnicodeResult):
             result.append(e)
-    return ''.join(result)
+    return ''.join(result).strip()
 
 fontpx_map = {
     '8px': 'xx-small',
@@ -183,7 +182,13 @@ def get_datetime(string):
     if match:
         post_wd = weekday_map[match.group(1)]
         now = datetime.now(tz=timezone.utc)
-        lastweek = now.replace(day=now.day-7)
+        try:
+            lastweek = now.replace(day=now.day-7)
+        except ValueError:
+            diff = now.day - 7
+            prev_month_days = calendar.monthrange(now.year, now.month - 1)[1]
+            lastweek = now.replace(month=now.month - 1,
+                                   day=prev_month_days - diff)
         lastweek_wd = lastweek.weekday()
         posttime = None
         if match.group('half'):
@@ -219,22 +224,26 @@ class FObject:
         self.id = oid
         self.parent = parent
         self.children = []
-        self.children_to_get = []
 
     def get_id(self):
         return self.id
 
 
 class Pollvote(FObject):
+
     vid = 1
+
     def __init__(self, voteoption, parent):
         super().__init__(Pollvote.vid, parent)
         Pollvote.vid += 1
         self.voteoption = voteoption
 
-    def do_dump_mybb(self, db):
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         optime = self.parent.get_optime()
@@ -248,22 +257,24 @@ class Pollvote(FObject):
         ]
         return ('pollvotes', row)
 
+    def format_phpbb(self):
+        raise NotImplementedError
+
+
 class Poll(FObject):
+
     pid = 1
 
     def __init__(self, elem, parent):
         super().__init__(Poll.pid, parent)
         Poll.pid += 1
-        polls_title = elem.find_elements_by_xpath(
-          './/div[contains(@class, "answer-title")]')
-        polls_votes = elem.find_elements_by_xpath(
-          './/span[contains(@class, "text-alter")]')
-        polls_votes.pop()
-        self.poll_total_voters = int(elem.find_element_by_xpath(
-          './/div[@class="number-votes"]').get_attribute(
-          'innerHTML').split("span>")[1].strip())
-        poll_option_type = elem.find_element_by_xpath(
-          'div[2]/form/div[1]/div[1]/input').get_attribute('type')
+        polls_title = elem.xpath('.//div[contains(@class, "answer-title")]')
+        polls_votes = elem.xpath(
+                './/div[@class="clabel"]/span[contains(@class, "text-alter")]')
+        self.poll_total_voters = int(elem.xpath(
+                './/div[@class="number-votes"]/text()')[1].strip())
+        poll_option_type = elem.xpath(
+                'div[2]/form/div[1]/div[1]/input')[0].get('type')
         self.multiple = 0
         self.results = []
 
@@ -272,11 +283,11 @@ class Poll(FObject):
 
         voteindex = 1
         for titles, votes in zip(polls_title, polls_votes):
-            vote = votes.get_attribute('innerHTML').split(' ')[0]
-            title = titles.get_attribute('innerHTML')
-            self.results.append((title,vote))
-            for itr in range(1,int(vote)+1):
-                pv = Pollvote(voteindex,self)
+            vote = votes.text_content().split(' ')[0]
+            title = titles.text_content()
+            self.results.append((title, vote))
+            for itr in range(1, int(vote) + 1):
+                pv = Pollvote(voteindex, self)
                 self.children.append(pv)
             voteindex += 1
 
@@ -285,12 +296,15 @@ class Poll(FObject):
 
     def get_optime(self):
         return self.parent.get_optime()
-    
-    def do_dump_mybb(self, db):
+
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
         for child in self.children:
-            child.do_dump_mybb(db)    
+            child.dump_mybb(db)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         tid = self.parent.get_id()
@@ -338,21 +352,21 @@ class Poll(FObject):
 
 
 class Post(FObject):
+
     pid = 1
 
-    def __init__(self, elem, subject, users, parent):
+    def __init__(self, elem, subject, parent):
         super().__init__(Post.pid, parent)
         Post.pid += 1
         self.subject = subject
-        self.author = elem.find_element_by_xpath(
-          'td[1]/div[@class="cell"]/div[@class="username"]/a').get_attribute(
-          'innerHTML')
-        self.uid = users.get_uid(self.author)
+        self.author = elem.xpath(
+          'td[1]/div[@class="cell"]/div[@class="username"]/a')[0].text_content()
+        self.uid = FObject.users.get_uid(self.author)
 
         # Posted Jan 23, 15 · OP · Last edited Apr 29, 16
         # Posted Sun at 03:52 pm · Last edited Sun at 15:53
-        time_elem = elem.find_element_by_xpath('td[2]/div[2]/div[1]/div[1]')
-        time_list = time_elem.text.split(' · ')
+        time_list = [x.strip() for x in elem.xpath(
+                     'td[2]/div[2]/div[1]/div[1]')[0].text_content().split('·')]
 
         self.posttime = int(get_datetime(time_list[0]).timestamp())
         # Ensure proper ordering if posts end up with the same or
@@ -369,13 +383,12 @@ class Post(FObject):
             self.edituid = self.uid
             self.edittime = int(get_datetime(time_list[-1]).timestamp())
 
-        msg_elem = elem.find_element_by_xpath('td[2]/div[1]/div[1]')
         try:
-            tree = lxml.html.fragment_fromstring(
-                msg_elem.get_attribute('innerHTML'),
-                create_parent='div')
+            msg_elem = elem.xpath('td[2]/div[1]/div[1]')[0]
+            tree = html.fragment_fromstring(
+                etree.tostring(msg_elem, encoding=str), create_parent='div')
             self.message = parse(tree, bbcode_formatter)
-        except lxml.etree.ParserError:
+        except etree.ParserError:
             self.message = ''
 
     def get_uid(self):
@@ -387,9 +400,12 @@ class Post(FObject):
     def get_posttime(self):
         return self.posttime
 
-    def do_dump_mybb(self, db):
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         tid = self.parent.get_id()
@@ -421,41 +437,43 @@ class Post(FObject):
 
 
 class Thread(FObject):
+
     tid = 1
 
-    def __init__(self, views, sticky, url, browser, users, parent):
+    def __init__(self, views, sticky, url, browser, parent):
         super().__init__(Thread.tid, parent)
         Thread.tid += 1
         self.views = views
         self.is_sticky = sticky
         browser.get(url)
-        posts_elem = browser.find_element_by_xpath(
-          './/div[@class="contentbox posts"]')
-        reply_cnt = posts_elem.find_element_by_xpath(
-          'div[1]/div[@class="text-right"]').text.split(' ')[0]
+        base_url = urljoin(url, '/')
+        page = html.fromstring(browser.page_source, base_url=base_url)
+
+        try:
+            posts_elem = page.xpath('.//div[@class="contentbox posts"]')[0]
+            reply_cnt = posts_elem.xpath('div[1]/div[@class="text-right"]')[0] \
+                                  .text_content().strip().split(' ')[0]
+        except IndexError:
+            print(url)
+            raise
 
         # Check for polls
         self.poll = None
-        try:
-            poll_block = browser.find_element_by_xpath(
-              ('.//td[2]/div[@class="post-wrapper"]'
-               '/div[@class="post-poll-area"]'))
-            self.poll = Poll(poll_block, self)
-        except NoSuchElementException:
-            pass
+        poll_block = page.xpath(('.//td[2]/div[@class="post-wrapper"]'
+                                 '/div[@class="post-poll-area"]'))
+        if len(poll_block):
+            self.poll = Poll(poll_block[0], self)
 
-        flags = posts_elem.find_element_by_xpath(
-          'div[1]/div[3]/span/div[1]/div[1]').get_attribute('class').split(' ')
+        flags = posts_elem.xpath('div[1]/div[3]/span/div[1]/div[1]')[0]
+        flags = flags.get('class').split(' ')
         self.is_locked = 1 if 'locked' in flags else 0
 
-        self.subject = posts_elem.find_element_by_xpath(
-          'div[1]/div[3]/span/h1').text
+        self.subject = ''.join([x.strip() for x in posts_elem.xpath('div[1]/div[3]/span/h1/text()')])
 
-        posts = posts_elem.find_elements_by_xpath(
-          'div[2]//tr[contains(@class, "row")]')
+        posts = posts_elem.xpath('div[2]//tr[contains(@class, "row")]')
 
         # First post
-        op = Post(posts[0], self.subject, users, self)
+        op = Post(posts[0], self.subject, self)
         self.opuid = op.get_uid()
         self.opauthor = op.get_author()
         self.optime = op.get_posttime()
@@ -465,27 +483,27 @@ class Thread(FObject):
         # Rest of the replies
         re_subject = 'RE: ' + self.subject
         for p in posts[1:]:
-            reply = Post(p, re_subject, users, self)
+            reply = Post(p, re_subject, self)
             self.children.append(reply)
 
         # Are there more pages?
-        try:
-            pages = int(browser.find_element_by_xpath(
-              ('.//div[@class="widgets top"]/div[@class="right"]'
-               '/div[1]/span[2]')).text.split(' ')[1])
+        pages = page.xpath(('.//div[@class="widgets top"]/div[@class="right"]'
+                            '/div[1]/span[2]'))
+        if len(pages):
+            pages = int(pages[0].text_content().split(' ')[1])
             for i in range(2, pages + 1):
                 browser.get("{}/page/{}".format(url, i))
-                next_posts = browser.find_elements_by_xpath(
+                next_page = html.fromstring(browser.page_source,
+                                                 base_url=base_url)
+                next_posts = next_page.xpath(
                   ('.//div[@class="contentbox posts"]/div[2]'
                    '//tr[contains(@class, "row")]'))
                 # OP is always visible in poll threads; ignore from page 2
                 if self.poll:
                     next_posts = next_posts[1:]
                 for p in next_posts:
-                    reply = Post(p, re_subject, users, self)
+                    reply = Post(p, re_subject, self)
                     self.children.append(reply)
-        except NoSuchElementException:
-            pass
 
         self.replies = len(self.children) - 1
         assert int(reply_cnt) == self.replies
@@ -511,13 +529,16 @@ class Thread(FObject):
         else:
             return 1
 
-    def do_dump_mybb(self, db):
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
         if self.poll:
-            self.poll.do_dump_mybb(db)
+            self.poll.dump_mybb(db)
         for child in self.children:
-            child.do_dump_mybb(db)
+            child.dump_mybb(db)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         fid = self.parent.get_id()
@@ -556,107 +577,92 @@ class Thread(FObject):
 
 
 class Forum(FObject):
+
     fid = 1
 
     def __init__(self, name, desc, url, browser, parent):
         super().__init__(Forum.fid, parent)
-        self.children.extend([[], []])
-        self.children_to_get.extend([[], []])
+        # [0] contains subforums, [1] contains threads
         Forum.fid += 1
+        # TODO Make sure everything dump_mybb() needs is initialised
+        # before checking for linkto
+        self.children.extend([[], []])
         self.name = name
         self.desc = desc
+        # TODO This is hard-coded for MyBB
         self.parentlist = self.parent.get_parentlist() + ',{}'.format(self.id)
         self.linkto = ''
         if urlparse(url).hostname.split('.')[-2] != 'enjin':
             self.linkto = url
             return
         browser.get(url)
-        body = browser.find_element_by_tag_name('body')
+        base_url = urljoin(url, '/')
+        page = html.fromstring(browser.page_source, base_url=base_url)
 
         # Are there subforums?
-        try:
-            self._do_init_subforums(body)
-        except NoSuchElementException:
-            pass
+        subforums = page.xpath(('//div[contains(@class, "contentbox") and '
+                                'contains(@class, "subforums-block")]/div[2]'
+                                '//tr[contains(@class, "row")]'))
+        if len(subforums):
+            for sf in subforums:
+                sf_name_elem = sf.xpath('td[2]/div[1]/a')[0]
+                sf_name = sf_name_elem.text.strip()
+                sf_desc = sf.xpath('td[2]/div[2]')[0].text.strip()
+                sf_url = urljoin(base_url, sf_name_elem.get('href'))
+                subforum = Forum(sf_name, sf_desc, sf_url, browser, self)
+                self.children[0].append(subforum)
 
         # Make sure this forum contains threads before continuing
-        nr_threads = body.find_element_by_xpath(
-          ('.//div[@class="contentbox threads"]/div[1]'
-           '/div[@class="text-right"]')).text
-        nr_threads = re.split('\s+·\s+(\d+) threads', nr_threads)[1]
+        nr_threads = page.xpath(('//div[@class="contentbox threads"]/div[1]'
+                                 '/div[@class="text-right"]'))[0].text_content()
+        nr_threads = re.split('\s+·\s+(\d+) threads', nr_threads.strip())[1]
         if int(nr_threads) == 0:
             return
 
         # Get threads from the first page
-        self._do_init_threads(body)
+        self._do_init_threads(page, browser)
 
         # Are there more pages?
-        try:
-            pages = body.find_element_by_xpath(
-              ('.//div[@class="widgets top"]/div[@class="right"]'
-               '/div[1]/div[1]/input'))
-            pages = int(pages.get_attribute('maxlength'))
+        pages = page.xpath(('.//div[@class="widgets top"]/div[@class="right"]'
+                            '/div[1]/div[1]/input'))
+        if len(pages):
+            pages = int(pages[0].get('maxlength'))
             for i in range(2, pages + 1):
                 browser.get("{}/page/{}".format(url, i))
-                next_body = browser.find_element_by_tag_name('body')
-                self._do_init_threads(next_body)
-        except NoSuchElementException:
-            pass
+                next_page = html.fromstring(browser.page_source,
+                                            base_url=base_url)
+                self._do_init_threads(next_page, browser)
 
-        assert int(nr_threads) == len(self.children_to_get[1])
+        assert int(nr_threads) == len(self.children[1])
 
-    def _do_init_subforums(self, body):
-        subforums = body.find_elements_by_xpath(
-          ('.//div[contains(@class, "contentbox") and '
-           'contains(@class, "subforums-block")]/div[2]'
-           '//tr[contains(@class, "row")]'))
-        for sf in subforums:
-            sf_name = sf.find_element_by_xpath('td[2]/div[1]/a')
-            sf_desc = sf.find_element_by_xpath('td[2]/div[2]').text
-            sf_url = sf_name.get_attribute('href')
-            self.children_to_get[0].append((sf_name.text, sf_desc, sf_url))
-
-    def _do_init_threads(self, body):
-        threads = body.find_elements_by_xpath(
-          ('.//div[@class="contentbox threads"]/div[2]'
-           '//tr[contains(@class, "row")]'))
+    def _do_init_threads(self, page, browser):
+        threads = page.xpath(('.//div[@class="contentbox threads"]/div[2]'
+                              '//tr[contains(@class, "row")]'))
         for t in threads:
             # Ignore threads that are marked as 'moved', since we'll pick
             # them up from their destination
-            if 'moved' in t.get_attribute('class').split(' '):
+            if 'moved' in t.get('class').split(' '):
                 continue
-            t_sticky = t.find_element_by_xpath('td[1]/a/div').get_attribute(
-              'class').split(' ')
-            t_sticky = 1 if 'sticky' in t_sticky else 0
-            t_name = t.find_element_by_xpath(
-              ('td[2]/a[contains(@class, "thread-view") and '
-                       'contains(@class, "thread-subject")]'))
-            t_url = t_name.get_attribute('href')
-            t_views = t.find_element_by_xpath(
-              ('td[contains(@class, "views")]')).text
-            self.children_to_get[1].append((t_views, t_sticky, t_url))
+            t_icons = t.xpath('td[1]/a/div')[0].get('class').split(' ')
+            t_sticky = 1 if 'sticky' in t_icons else 0
+            t_name = t.xpath(('td[2]/a[contains(@class, "thread-view") and '
+                              'contains(@class, "thread-subject")]'))[0]
+            t_url = urljoin(page.base_url, t_name.get('href'))
+            t_views = t.xpath(('td[contains(@class, "views")]'))[0].text.strip()
+            thread = Thread(t_views, t_sticky, t_url, browser, self)
+            self.children[1].append(thread)
 
     def get_parentlist(self):
         return self.parentlist
 
-    def get_children(self, browser, users):
-        for child in self.children_to_get[0]:
-            sf_name, sf_desc, sf_url = child
-            forum = Forum(sf_name, sf_desc, sf_url, browser, self)
-            self.children[0].append(forum)
-        for child in self.children_to_get[1]:
-            t_views, t_sticky, t_url = child
-            thread = Thread(t_views, t_sticky, t_url, browser, users, self)
-            self.children[1].append(thread)
-
-        for subforum in self.children[0]:
-            subforum.get_children(browser, users)
-
-    def do_dump_mybb(self, db):
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
         for child in self.children[0] + self.children[1]:
-            child.do_dump_mybb(db)
+            child.dump_mybb(db)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         # pid in this case is parent (category) id
@@ -712,36 +718,34 @@ class Forum(FObject):
 
 class Category(FObject):
 
-    def __init__(self, elem):
-        # A category has no parents
-        super().__init__(Forum.fid, None)
+    def __init__(self, elem, browser, parent):
+        super().__init__(Forum.fid, parent)
         Forum.fid += 1
-        self.name = elem.find_element_by_xpath('div[1]/div[3]/span').text
+        self.name = elem.xpath('div[1]/div[3]/span')[0].text.strip()
         self.parentlist = str(self.id)
-
-        forums = elem.find_elements_by_xpath('div[2]//td[@class="c forum"]')
-        for f in forums:
-            f_name = f.find_element_by_xpath('div[1]/a')
-            f_desc = f.find_element_by_xpath('div[2]')
-            f_url = f_name.get_attribute('href')
-            self.children_to_get.append((f_name.text, f_desc.text, f_url))
+        forums = elem.xpath('div[2]//td[@class="c forum"]')
+        if len(forums):
+            for f in forums:
+                name_elem = f.xpath('div[1]/a')[0]
+                name = name_elem.text.strip()
+                desc = f.xpath('div[2]')[0].text.strip()
+                url = urljoin(elem.base_url, name_elem.get('href'))
+                self.children.append(Forum(name, desc, url, browser, self))
+        else:
+            raise ValueError('Could not find any forums in {}'.format(
+                    self.name))
 
     def get_parentlist(self):
         return self.parentlist
 
-    def get_children(self, browser, users):
-        for f_name, f_desc, f_url in self.children_to_get:
-            forum = Forum(f_name, f_desc, f_url, browser, self)
-            self.children.append(forum)
-
-        for forum in self.children:
-            forum.get_children(browser, users)
-
-    def do_dump_mybb(self, db):
+    def dump_mybb(self, db):
         table, row = self.format_mybb()
         db[table].append(row)
-        for child in self.children:
-            child.do_dump_mybb(db)
+        for forum in self.children:
+            forum.dump_mybb(db)
+
+    def dump_phpbb(self, db):
+        raise NotImplementedError
 
     def format_mybb(self):
         row = [
@@ -791,3 +795,24 @@ class Category(FObject):
 
     def format_phpbb(self):
         raise NotImplementedError
+
+
+class EnjinForum(FObject):
+
+    def __init__(self, url, browser, users):
+        super().__init__(0, None)
+        FObject.users = users
+        base_url = urljoin(url, '/')
+        page = html.fromstring(browser.page_source, base_url=base_url)
+        categories = page.xpath(
+                ('//div[contains(@class, "contentbox") and '
+                 'contains(@class, "category")]'))
+        if len(categories):
+            for c in categories:
+                self.children.append(Category(c, browser, self))
+        else:
+            raise ValueError('Could not find any categories in {}'.format(url))
+
+    def dump(self, db):
+        for child in self.children:
+            child.dump_mybb(db)

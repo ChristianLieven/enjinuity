@@ -9,10 +9,10 @@
 # You should have received a copy of the CC0 Public Domain Dedication
 # along with this software. If not, see
 # <http://creativecommons.org/publicdomain/zero/1.0/>.
-import enjinuity.objects
+import lxml.html
 import pickle
+from enjinuity.objects import EnjinForum
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
 from urllib.parse import urlparse
 
 def dump_cookies(url, user, passwd, filename, driver='Firefox'):
@@ -61,43 +61,19 @@ class Scraper:
             if c['domain'] == hostname:
                 self.browser.add_cookie(c)
         self.browser.refresh()
+        self.url = url
         self.users = users
-
         self.db = {}
-        self.children = []
-        try:
-            self.categories = self.browser.find_elements_by_xpath(
-              ('//div[contains(@class, "contentbox") and '
-                     'contains(@class, "category")]'))
-        except NoSuchElementException:
-            raise ValueError(('Could not find any categories, '
-                              'check the input URL?'))
 
     def __del__(self):
         if self.browser:
             self.browser.quit()
 
     def run(self):
-        for c in self.categories:
-            category = enjinuity.objects.Category(c)
-            self.children.append(category)
-
-        for child in self.children:
-            child.get_children(self.browser, self.users)
-
-    def run_single(self, category):
-        for c in self.categories:
-            c_name = c.find_element_by_xpath('div[1]/div[3]/span').text
-            if c_name == category:
-                cat = enjinuity.objects.Category(c)
-                self.children.append(cat)
-                cat.get_children(self.browser, self.users)
-                return
-        raise ValueError('Could not find category {}'.format(category))
+        self.forum = EnjinForum(self.url, self.browser, self.users)
 
     def dump_mybb(self, filename):
         for table in ['forums', 'threads', 'posts', 'polls', 'pollvotes']:
             self.db[table] = []
-        for child in self.children:
-            child.do_dump_mybb(self.db)
+        self.forum.dump(self.db)
         pickle.dump(self.db, open(filename, 'wb'))

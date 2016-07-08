@@ -29,7 +29,7 @@ def md5(string):
 
 class Users:
 
-    def __init__(self, users, email, passwd, validtags):
+    def __init__(self, users, validtags):
         self.uid = 2
         try:
             with open(users, 'r') as f:
@@ -38,15 +38,13 @@ class Users:
             # users is a URL, scrape instead
             self.users = []
             users_to_get = []
-            browser = webdriver.Chrome()
+            browser = webdriver.Firefox()
             browser.get(users)
             base_url = urljoin(users, '/')
             page = lxml.html.fromstring(browser.page_source, base_url=base_url)
             self._scrape_users(page, users_to_get, validtags)
             self._scrape_rep(users_to_get, browser)
             browser.quit()
-        self.email = email
-        self.passwd = passwd
 
         # Database-specific output
         self.db = {}
@@ -101,7 +99,7 @@ class Users:
 class MyBBUsers(Users):
 
     def __init__(self, users, email, passwd, validtags=None):
-        super().__init__(users, email, passwd, validtags)
+        super().__init__(users, validtags)
         self.db['users'] = []
         # http://docs.mybb.com/1.6/Database-Tables-mybb-users/
         for user in self.users:
@@ -113,7 +111,7 @@ class MyBBUsers(Users):
             else:
                 name, joindate, lastseen, rep = user
             salt = random_string(8)
-            saltedpw = md5(md5(salt) + md5(self.passwd))
+            saltedpw = md5(md5(salt) + md5(passwd))
             loginkey = random_string(50)
             now = int(time.time())
             self.db['users'].append([
@@ -122,7 +120,7 @@ class MyBBUsers(Users):
                 saltedpw,
                 salt,
                 loginkey,
-                self.email,
+                email,
                 0,          # postnum
                 0,          # threadnum
                 '',         # avatar
