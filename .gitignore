@@ -66,5 +66,3 @@ target/
 
 # Pickles
 *.pkl
-
-config.json
