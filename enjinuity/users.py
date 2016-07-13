@@ -9,19 +9,15 @@
 # You should have received a copy of the CC0 Public Domain Dedication
 # along with this software. If not, see
 # <http://creativecommons.org/publicdomain/zero/1.0/>.
-import base64
-import binascii
-import bcrypt
 import hashlib
 import pickle
 import random
 import string
-import sys
 import time
 from enjinuity.objects import get_datetime
 from lxml import html
 from selenium import webdriver
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 def random_string(length):
     return ''.join(random.SystemRandom().choice(string.ascii_lowercase +
@@ -214,108 +210,3 @@ class Users:
         if not self.db:
             raise RuntimeError('ERROR: Call a dump_xxx function first.')
         pickle.dump(self.user_map, open(filename, 'wb'))
-
-################################################################################
-
-
-class phpBBUsers(Users):
-
-    def __init__(self, users, email, passwd, validtags=None):
-        super().__init__(users, validtags)
-        # user_id 1 is for the Anonymous guest user, user_id 2 is for
-        # the administrator on board installation, user_id 3-47 are for
-        # search crawlers.
-        self.uid = 48
-        self.db['users'] = []
-        self.db['user_group'] = []
-        # https://wiki.phpbb.com/Table.phpbb_users
-        for user in self.users:
-            if isinstance(user, str):
-                name = user
-                joindate = int(time.time())
-                lastseen = joindate
-            else:
-                name, joindate, lastseen = user
-            # phpBB 3.1 uses bcrypt 2y with 10 rounds
-            salt = bcrypt.gensalt(10, prefix=b'2a').replace(b'$2a', b'$2y')
-            saltedpw = bcrypt.hashpw(passwd.encode(), salt).decode()
-            now = int(time.time())
-            # return sprintf('%u', crc32(strtolower($email))) . strlen($email);
-            # Since crc32 returns a negative int on 32-bit platforms,
-            # it's not clear what happens when phpBB 'concatenates' two
-            # ints first before printing the unsigned representation.
-            emailcrc32 = binascii.crc32(email.encode())
-            if not sys.maxsize > 2**32:
-                emailcrc32 & 0xffffffff
-            emailcrc32 = int(str(emailcrc32) + str(len(email)))
-            self.db['users'].append([
-                self.uid,
-                0,          # user_type: normal user
-                2,          # group_id: registered
-                '',         # user_permissions
-                0,          # user_perm_from
-                '0.0.0.0',  # user_ip
-                joindate,   # user_regdate
-                name,       # username
-                name.lower(), # username_clean
-                saltedpw,   # user_password
-                now,        # user_passchg
-                email,      # user_email
-                emailcrc32, # user_email_hash
-                '',         # user_birthday
-                0,          # user_lastvisit
-                0,          # user_lastmark
-                0,          # user_lastpost_time
-                '',         # user_lastpage
-                '',         # user_last_confirm_key
-                0,          # user_last_search
-                0,          # user_warnings
-                0,          # user_last_warnings
-                0,          # user_login_attempts
-                0,          # user_inactive_reason
-                0,          # user_inactive_time
-                0,          # user_posts
-                'en',       # user_lang
-                '',         # user_timezone
-                'D M d, Y g:i a', # user_dateformat
-                1,          # user_style
-                0,          # user_rank
-                '',         # user_colour
-                0,          # user_new_privmsg
-                0,          # user_unread_privmsg
-                0,          # user_last_privmsg
-                0,          # user_message_rules
-                -3,         # user_full_folder
-                0,          # user_emailtime
-                0,          # user_topic_show_days
-                't',        # user_topic_sortby_type
-                'd',        # user_topic_sortby_dir
-                0,          # user_post_show_days
-                't',        # user_post_sortby_type
-                'a',        # user_post_sortby_dir
-                0,          # user_notify
-                1,          # user_notify_pm
-                0,          # user_notify_type
-                1,          # user_allow_pm
-                1,          # user_allow_viewonline
-                1,          # user_allow_viewemail
-                1,          # user_allow_massemail
-                230271,     # user_options
-                '',         # user_avatar
-                '',         # user_avatar_type
-                0,          # user_avatar_width
-                0,          # user_avatar_height
-                '',         # user_sig
-                '',         # user_sig_bbcode_uid,
-                '',         # user_sig_bbcode_bitfield
-                '',         # user_jabber
-                '',         # user_actkey
-                '',         # user_newpasswd
-                '',         # user_form_salt
-                1,          # user_new
-                0,          # user_reminded
-                0           # user_reminded_time
-            ])
-            self.db['user_group'].append([2, self.uid, 0, 0])
-            self.user_map[user] = self.uid
-            self.uid += 1

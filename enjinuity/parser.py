@@ -25,7 +25,7 @@ class Parser:
         self.forum = EnjinForum(url, site, users)
         self.db = {}
 
-    def dump(self, filename):
+    def dump_mybb(self, filename):
         for table in ['forums', 'threads', 'posts', 'polls', 'pollvotes']:
             self.db[table] = []
         self.forum.dump_mybb(self.db)

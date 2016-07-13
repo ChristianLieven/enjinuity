@@ -115,7 +115,6 @@ class Scraper:
             print(f_url)
             return
 
-    # http://essencesunstrider.enjin.com/forum/m/.../viewforum/
     def _scrape_forum(self, f_url):
         if urljoin(f_url, '/') != self.base_url:
             print('WARN:\tSkipping external link:\t', f_url)
@@ -155,17 +154,3 @@ class Scraper:
 
     def dump(self, filename):
         pickle.dump(self.site, open(filename, 'wb'))
-
-    # Unused
-
-    def _dump_mybb(self, filename):
-        for table in ['forums', 'threads', 'posts', 'polls', 'pollvotes']:
-            self.db[table] = []
-        self.forum.dump_mybb(self.db)
-        pickle.dump(self.db, open(filename, 'wb'))
-
-    def _dump_phpbb(self, filename):
-        for table in ['forums', 'topics', 'posts']:
-            self.db[table] = []
-        self.forum.dump_phpbb(self.db)
-        pickle.dump(self.db, open(filename, 'wb'))

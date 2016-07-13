@@ -16,11 +16,11 @@ from datetime import datetime, timedelta, timezone
 from lxml import etree, html
 from urllib.parse import urljoin, urlparse
 
-def parse(tree, func, *args, **kwargs):
+def parse_message(tree, func, *args, **kwargs):
     result = []
     for e in tree.xpath('child::node()'):
         if isinstance(e, html.HtmlElement):
-            children = parse(e, func, *args, **kwargs)
+            children = parse_message(e, func, *args, **kwargs)
             child_result = func(e, children, *args, **kwargs)
             if child_result:
                 result.append(child_result)
@@ -242,9 +242,6 @@ class Pollvote(FObject):
         table, row = self.format_mybb()
         db[table].append(row)
 
-    def dump_phpbb(self, db):
-        raise NotImplementedError
-
     def format_mybb(self):
         optime = self.parent.get_optime()
         pid = self.parent.id
@@ -256,9 +253,6 @@ class Pollvote(FObject):
             optime
         ]
         return ('pollvotes', row)
-
-    def format_phpbb(self):
-        raise NotImplementedError
 
 
 class Poll(FObject):
@@ -303,9 +297,6 @@ class Poll(FObject):
         for child in self.children:
             child.dump_mybb(db)
 
-    def dump_phpbb(self, db):
-        raise NotImplementedError
-
     def format_mybb(self):
         tid = self.parent.get_id()
         optime = self.get_optime()
@@ -347,9 +338,6 @@ class Poll(FObject):
         ]
         return ('polls', row)
 
-    def format_phpbb(self):
-        raise NotImplementedError
-
 
 class Post(FObject):
 
@@ -390,7 +378,7 @@ class Post(FObject):
             msg_elem = elem.xpath('td[2]/div[1]/div[1]')[0]
             tree = html.fragment_fromstring(
                 etree.tostring(msg_elem, encoding=str), create_parent='div')
-            self.message = parse(tree, bbcode_formatter)
+            self.message = parse_message(tree, bbcode_formatter)
         except etree.ParserError:
             self.message = ''
 
@@ -405,10 +393,6 @@ class Post(FObject):
 
     def dump_mybb(self, db):
         table, row = self.format_mybb()
-        db[table].append(row)
-
-    def dump_phpbb(self, db):
-        table, row = self.format_phpbb()
         db[table].append(row)
 
     def format_mybb(self):
@@ -433,42 +417,6 @@ class Post(FObject):
             self.edittime,
             '',         # editreason
             1           # visible
-        ]
-        return ('posts', row)
-
-    def format_phpbb(self):
-        tid = self.parent.get_id()
-        fid = self.parent.parent.get_id()
-        row = [
-            self.id,    # post_id
-            tid,        # topic_id
-            fid,        # forum_id
-            self.uid,   # poster_id
-            0,          # icon_id
-            '0.0.0.0',  # poster_ip
-            self.posttime,
-            0,          # post_reported
-            1,          # enable_bbcdoe
-            1,          # enable_smilies
-            1,          # enable_magic_url
-            1,          # enable_sig
-            '',         # post_username
-            self.subject,
-            self.message,
-            '',         # post_checksum
-            0,          # post_attachment
-            '',         # bbcode_bitfield
-            '',         # bbcode_uid
-            1,          # post_postcount
-            self.edittime,
-            '',
-            self.edituid,
-            1 if self.edittime else 0,
-            0,
-            1,
-            0,
-            '',
-            0
         ]
         return ('posts', row)
 
@@ -569,12 +517,6 @@ class Thread(FObject):
         for child in self.children:
             child.dump_mybb(db)
 
-    def dump_phpbb(self, db):
-        table, row = self.format_phpbb()
-        db[table].append(row)
-        for child in self.children:
-            child.dump_phpbb(db)
-
     def format_mybb(self):
         fid = self.parent.get_id()
         poll = self.poll.get_id() if self.poll else 0
@@ -606,51 +548,6 @@ class Thread(FObject):
             0               # deletetime
         ]
         return ('threads', row)
-
-    def format_phpbb(self):
-        fid = self.parent.get_id()
-        row = [
-            self.id,        # topic_id
-            fid,            # forum_id
-            0,              # icon_id
-            0,              # topic_attachment
-            0,              # topic_reported
-            self.subject,   # topic_title
-            self.opuid,     # topic_poster
-            self.optime,    # topic_time
-            0,              # topic_time_limit
-            self.views,     # topic_views
-            self.is_locked, # topic_status: ITEM_LOCKED(1)
-            self.is_sticky, # topic_type: POST_STICKY(1)
-            self.oppid,     # topic_first_post_id
-            self.opauthor,  # topic_first_poster_name
-            '',             # topic_first_poster_colour
-            self.lppid,     # topic_last_post_id
-            self.lpuid,     # topic_last_poster_id
-            self.lpauthor,  # topic_last_poster_name
-            '',             # topic_last_poster_colour
-            'Re:' + self.subject, # topic_last_post_subject
-            self.lptime,    # topic_last_post_time
-            self.lptime,    # topic_last_view_time
-            0,              # topic_moved_id
-            0,              # topic_bumped
-            0,              # topic_bumper
-            # TODO
-            '',             # poll_title
-            0,              # poll_start
-            0,              # poll_length
-            1,              # poll_max_options
-            0,              # poll_last_vote
-            0,              # poll_vote_change
-            1,              # topic_visibility
-            0,              # topic_delete_time
-            '',             # topic_delete_reason
-            0,              # topic_delete_user
-            self.replies,   # topic_posts_approved
-            0,              # topic_posts_unapproved
-            0               # topic_posts_softdeleted
-        ]
-        return ('topics', row)
 
 
 class Forum(FObject):
@@ -737,12 +634,6 @@ class Forum(FObject):
         for child in self.children[0] + self.children[1]:
             child.dump_mybb(db)
 
-    def dump_phpbb(self, db):
-        table, row = self.format_phpbb()
-        db[table].append(row)
-        for child in self.children[0] + self.children[1]:
-            child.dump_phpbb(db)
-
     def format_mybb(self):
         # pid in this case is parent (category) id
         pid = self.parent.get_id()
@@ -791,62 +682,6 @@ class Forum(FObject):
         ]
         return ('forums', row)
 
-    def format_phpbb(self):
-        pid = self.parent.get_id()
-        row = [
-            self.id,    # forum_id
-            pid,        # parent_id
-            0,          # left_id
-            0,          # right_id
-            '',         # TODO forum_parents
-            self.name,  # forum_name
-            self.desc,  # forum_desc
-            '',         # forum_desc_bitfield
-            7,          # forum_desc_options
-            '',         # forum_desc_uid
-            self.link,  # forum_link
-            '',         # forum_password
-            0,          # forum_style
-            '',         # forum_image
-            '',         # forum_rules
-            '',         # forum_rules_link
-            '',         # forum_rules_bitfield
-            7,          # forum_rules_options
-            '',         # forum_rules_uid
-            0,          # forum_topics_per_page
-            # forum_type
-            2 if self.link else 1,
-            0,          # forum_status
-            0,          # forum_last_post_id
-            0,          # forum_last_poster_id
-            '',         # forum_last_post_subject
-            0,          # forum_last_post_time
-            '',         # forum_last_poster_name
-            '',         # forum_last_poster_colour
-            48,         # forum_flags
-            1,          # display_on_index
-            1,          # enable_indexing
-            1,          # enable_icons
-            0,          # enable_prune
-            0,          # prune_next
-            0,          # prune_days
-            0,          # prune_viewed
-            0,          # prune_freq
-            1,          # display_subforum_list
-            0,          # forum_options
-            0,          # enable_shadow_prune
-            7,          # prune_shadow_days
-            1,          # prune_shadow_freq
-            0,          # prune_shadow_next
-            0,          # forum_posts_approved
-            0,          # forum_posts_unapproved
-            0,          # forum_posts_softdeleted
-            0,          # forum_topics_approved
-            0,          # forum_topics_unapproved
-            0           # forum_topics_softdeleted
-        ]
-        return ('forums', row)
-
 
 class Category(FObject):
 
@@ -875,12 +710,6 @@ class Category(FObject):
         db[table].append(row)
         for forum in self.children:
             forum.dump_mybb(db)
-
-    def dump_phpbb(self, db):
-        table, row = self.format_phpbb()
-        db[table].append(row)
-        for forum in self.children:
-            forum.dump_phpbb(db)
 
     def format_mybb(self):
         row = [
@@ -928,60 +757,6 @@ class Category(FObject):
         ]
         return ('forums', row)
 
-    def format_phpbb(self):
-        row = [
-            self.id,    # forum_id
-            0,          # parent_id
-            0,          # left_id
-            0,          # right_id
-            '',         # forum_parents
-            self.name,  # forum_name
-            '',         # forum_desc
-            '',         # forum_desc_bitfield
-            7,          # forum_desc_options
-            '',         # forum_desc_uid
-            '',         # forum_link
-            '',         # forum_password
-            0,          # forum_style
-            '',         # forum_image
-            '',         # forum_rules
-            '',         # forum_rules_link
-            '',         # forum_rules_bitfield
-            7,          # forum_rules_options
-            '',         # forum_rules_uid
-            0,          # forum_topics_per_page
-            0,          # forum_type: category
-            0,          # forum_status
-            0,          # forum_last_post_id
-            0,          # forum_last_poster_id
-            '',         # forum_last_post_subject
-            0,          # forum_last_post_time
-            '',         # forum_last_poster_name
-            '',         # forum_last_poster_colour
-            32,         # forum_flags
-            1,          # display_on_index
-            1,          # enable_indexing
-            1,          # enable_icons
-            0,          # enable_prune
-            0,          # prune_next
-            0,          # prune_days
-            0,          # prune_viewed
-            0,          # prune_freq
-            1,          # display_subforum_list
-            0,          # forum_options
-            0,          # enable_shadow_prune
-            7,          # prune_shadow_days
-            1,          # prune_shadow_freq
-            0,          # prune_shadow_next
-            0,          # forum_posts_approved
-            0,          # forum_posts_unapproved
-            0,          # forum_posts_softdeleted
-            0,          # forum_topics_approved
-            0,          # forum_topics_unapproved
-            0           # forum_topics_softdeleted
-        ]
-        return ('forums', row)
-
 
 class EnjinForum(FObject):
 
@@ -1001,7 +776,3 @@ class EnjinForum(FObject):
     def dump_mybb(self, db):
         for child in self.children:
             child.dump_mybb(db)
-
-    def dump_phpbb(self, db):
-        for child in self.children:
-            child.dump_phpbb(db)
