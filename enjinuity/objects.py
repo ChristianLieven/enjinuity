@@ -361,7 +361,10 @@ class Post(FObject):
         self.subject = subject
         self.author = elem.xpath(
           'td[1]/div[@class="cell"]/div[@class="username"]/a')[0].text_content()
-        self.uid = FObject.users.get_uid(self.author)
+        try:
+            self.uid = FObject.users[self.author]
+        except KeyError:
+            self.uid = 0
 
         # Posted Jan 23, 15 · OP · Last edited Apr 29, 16
         # Posted Sun at 03:52 pm · Last edited Sun at 15:53
@@ -405,7 +408,8 @@ class Post(FObject):
         db[table].append(row)
 
     def dump_phpbb(self, db):
-        raise NotImplementedError
+        table, row = self.format_phpbb()
+        db[table].append(row)
 
     def format_mybb(self):
         tid = self.parent.get_id()
@@ -433,29 +437,57 @@ class Post(FObject):
         return ('posts', row)
 
     def format_phpbb(self):
-        raise NotImplementedError
+        tid = self.parent.get_id()
+        fid = self.parent.parent.get_id()
+        row = [
+            self.id,    # post_id
+            tid,        # topic_id
+            fid,        # forum_id
+            self.uid,   # poster_id
+            0,          # icon_id
+            '0.0.0.0',  # poster_ip
+            self.posttime,
+            0,          # post_reported
+            1,          # enable_bbcdoe
+            1,          # enable_smilies
+            1,          # enable_magic_url
+            1,          # enable_sig
+            '',         # post_username
+            self.subject,
+            self.message,
+            '',         # post_checksum
+            0,          # post_attachment
+            '',         # bbcode_bitfield
+            '',         # bbcode_uid
+            1,          # post_postcount
+            self.edittime,
+            '',
+            self.edituid,
+            1 if self.edittime else 0,
+            0,
+            1,
+            0,
+            '',
+            0
+        ]
+        return ('posts', row)
 
 
 class Thread(FObject):
 
     tid = 1
 
-    def __init__(self, views, sticky, url, browser, parent):
+    def __init__(self, views, sticky, url, site, parent):
         super().__init__(Thread.tid, parent)
         Thread.tid += 1
         self.views = views
         self.is_sticky = sticky
-        browser.get(url)
         base_url = urljoin(url, '/')
-        page = html.fromstring(browser.page_source, base_url=base_url)
+        page = html.fromstring(site[url], base_url=base_url)
 
-        try:
-            posts_elem = page.xpath('.//div[@class="contentbox posts"]')[0]
-            reply_cnt = posts_elem.xpath('div[1]/div[@class="text-right"]')[0] \
-                                  .text_content().strip().split(' ')[0]
-        except IndexError:
-            print(url)
-            raise
+        posts_elem = page.xpath('//div[@class="contentbox posts"]')[0]
+        reply_cnt = posts_elem.xpath('div[1]/div[@class="text-right"]')[0] \
+                              .text_content().strip().split(' ')[0]
 
         # Check for polls
         self.poll = None
@@ -492,9 +524,8 @@ class Thread(FObject):
         if len(pages):
             pages = int(pages[0].text_content().split(' ')[1])
             for i in range(2, pages + 1):
-                browser.get("{}/page/{}".format(url, i))
-                next_page = html.fromstring(browser.page_source,
-                                                 base_url=base_url)
+                next_html = site["{}/page/{}".format(url, i)]
+                next_page = html.fromstring(next_html, base_url)
                 next_posts = next_page.xpath(
                   ('.//div[@class="contentbox posts"]/div[2]'
                    '//tr[contains(@class, "row")]'))
@@ -510,9 +541,10 @@ class Thread(FObject):
 
         # Last post
         lp = self.children[-1]
-        self.lptime = lp.get_posttime()
-        self.lpauthor = lp.get_author()
         self.lpuid = lp.get_uid()
+        self.lpauthor = lp.get_author()
+        self.lptime = lp.get_posttime()
+        self.lppid = lp.get_id()
 
     def get_optime(self):
         return self.optime
@@ -538,7 +570,10 @@ class Thread(FObject):
             child.dump_mybb(db)
 
     def dump_phpbb(self, db):
-        raise NotImplementedError
+        table, row = self.format_phpbb()
+        db[table].append(row)
+        for child in self.children:
+            child.dump_phpbb(db)
 
     def format_mybb(self):
         fid = self.parent.get_id()
@@ -573,14 +608,57 @@ class Thread(FObject):
         return ('threads', row)
 
     def format_phpbb(self):
-        raise NotImplementedError
+        fid = self.parent.get_id()
+        row = [
+            self.id,        # topic_id
+            fid,            # forum_id
+            0,              # icon_id
+            0,              # topic_attachment
+            0,              # topic_reported
+            self.subject,   # topic_title
+            self.opuid,     # topic_poster
+            self.optime,    # topic_time
+            0,              # topic_time_limit
+            self.views,     # topic_views
+            self.is_locked, # topic_status: ITEM_LOCKED(1)
+            self.is_sticky, # topic_type: POST_STICKY(1)
+            self.oppid,     # topic_first_post_id
+            self.opauthor,  # topic_first_poster_name
+            '',             # topic_first_poster_colour
+            self.lppid,     # topic_last_post_id
+            self.lpuid,     # topic_last_poster_id
+            self.lpauthor,  # topic_last_poster_name
+            '',             # topic_last_poster_colour
+            'Re:' + self.subject, # topic_last_post_subject
+            self.lptime,    # topic_last_post_time
+            self.lptime,    # topic_last_view_time
+            0,              # topic_moved_id
+            0,              # topic_bumped
+            0,              # topic_bumper
+            # TODO
+            '',             # poll_title
+            0,              # poll_start
+            0,              # poll_length
+            1,              # poll_max_options
+            0,              # poll_last_vote
+            0,              # poll_vote_change
+            1,              # topic_visibility
+            0,              # topic_delete_time
+            '',             # topic_delete_reason
+            0,              # topic_delete_user
+            self.replies,   # topic_posts_approved
+            0,              # topic_posts_unapproved
+            0               # topic_posts_softdeleted
+        ]
+        return ('topics', row)
 
 
 class Forum(FObject):
 
     fid = 1
 
-    def __init__(self, name, desc, url, browser, parent):
+    #self.children.append(Forum(name, desc, url, site, self))
+    def __init__(self, name, desc, url, site, parent):
         super().__init__(Forum.fid, parent)
         # [0] contains subforums, [1] contains threads
         Forum.fid += 1
@@ -591,13 +669,12 @@ class Forum(FObject):
         self.desc = desc
         # TODO This is hard-coded for MyBB
         self.parentlist = self.parent.get_parentlist() + ',{}'.format(self.id)
-        self.linkto = ''
+        self.link = ''
         if urlparse(url).hostname.split('.')[-2] != 'enjin':
-            self.linkto = url
+            self.link = url
             return
-        browser.get(url)
         base_url = urljoin(url, '/')
-        page = html.fromstring(browser.page_source, base_url=base_url)
+        page = html.fromstring(site[url], base_url)
 
         # Are there subforums?
         subforums = page.xpath(('//div[contains(@class, "contentbox") and '
@@ -609,7 +686,7 @@ class Forum(FObject):
                 sf_name = sf_name_elem.text.strip()
                 sf_desc = sf.xpath('td[2]/div[2]')[0].text.strip()
                 sf_url = urljoin(base_url, sf_name_elem.get('href'))
-                subforum = Forum(sf_name, sf_desc, sf_url, browser, self)
+                subforum = Forum(sf_name, sf_desc, sf_url, site, self)
                 self.children[0].append(subforum)
 
         # Make sure this forum contains threads before continuing
@@ -620,7 +697,7 @@ class Forum(FObject):
             return
 
         # Get threads from the first page
-        self._do_init_threads(page, browser)
+        self._do_init_threads(page, site)
 
         # Are there more pages?
         pages = page.xpath(('.//div[@class="widgets top"]/div[@class="right"]'
@@ -628,14 +705,13 @@ class Forum(FObject):
         if len(pages):
             pages = int(pages[0].get('maxlength'))
             for i in range(2, pages + 1):
-                browser.get("{}/page/{}".format(url, i))
-                next_page = html.fromstring(browser.page_source,
-                                            base_url=base_url)
-                self._do_init_threads(next_page, browser)
+                next_html = site["{}/page/{}".format(url, i)]
+                next_page = html.fromstring(next_html, base_url)
+                self._do_init_threads(next_page, site)
 
         assert int(nr_threads) == len(self.children[1])
 
-    def _do_init_threads(self, page, browser):
+    def _do_init_threads(self, page, site):
         threads = page.xpath(('.//div[@class="contentbox threads"]/div[2]'
                               '//tr[contains(@class, "row")]'))
         for t in threads:
@@ -649,7 +725,7 @@ class Forum(FObject):
                               'contains(@class, "thread-subject")]'))[0]
             t_url = urljoin(page.base_url, t_name.get('href'))
             t_views = t.xpath(('td[contains(@class, "views")]'))[0].text.strip()
-            thread = Thread(t_views, t_sticky, t_url, browser, self)
+            thread = Thread(t_views, t_sticky, t_url, site, self)
             self.children[1].append(thread)
 
     def get_parentlist(self):
@@ -662,7 +738,10 @@ class Forum(FObject):
             child.dump_mybb(db)
 
     def dump_phpbb(self, db):
-        raise NotImplementedError
+        table, row = self.format_phpbb()
+        db[table].append(row)
+        for child in self.children[0] + self.children[1]:
+            child.dump_phpbb(db)
 
     def format_mybb(self):
         # pid in this case is parent (category) id
@@ -671,7 +750,7 @@ class Forum(FObject):
             self.id,    # fid
             self.name,
             self.desc,
-            self.linkto,
+            self.link,
             'f',        # type
             pid,
             self.parentlist,
@@ -713,12 +792,65 @@ class Forum(FObject):
         return ('forums', row)
 
     def format_phpbb(self):
-        raise NotImplementedError
+        pid = self.parent.get_id()
+        row = [
+            self.id,    # forum_id
+            pid,        # parent_id
+            0,          # left_id
+            0,          # right_id
+            '',         # TODO forum_parents
+            self.name,  # forum_name
+            self.desc,  # forum_desc
+            '',         # forum_desc_bitfield
+            7,          # forum_desc_options
+            '',         # forum_desc_uid
+            self.link,  # forum_link
+            '',         # forum_password
+            0,          # forum_style
+            '',         # forum_image
+            '',         # forum_rules
+            '',         # forum_rules_link
+            '',         # forum_rules_bitfield
+            7,          # forum_rules_options
+            '',         # forum_rules_uid
+            0,          # forum_topics_per_page
+            # forum_type
+            2 if self.link else 1,
+            0,          # forum_status
+            0,          # forum_last_post_id
+            0,          # forum_last_poster_id
+            '',         # forum_last_post_subject
+            0,          # forum_last_post_time
+            '',         # forum_last_poster_name
+            '',         # forum_last_poster_colour
+            48,         # forum_flags
+            1,          # display_on_index
+            1,          # enable_indexing
+            1,          # enable_icons
+            0,          # enable_prune
+            0,          # prune_next
+            0,          # prune_days
+            0,          # prune_viewed
+            0,          # prune_freq
+            1,          # display_subforum_list
+            0,          # forum_options
+            0,          # enable_shadow_prune
+            7,          # prune_shadow_days
+            1,          # prune_shadow_freq
+            0,          # prune_shadow_next
+            0,          # forum_posts_approved
+            0,          # forum_posts_unapproved
+            0,          # forum_posts_softdeleted
+            0,          # forum_topics_approved
+            0,          # forum_topics_unapproved
+            0           # forum_topics_softdeleted
+        ]
+        return ('forums', row)
 
 
 class Category(FObject):
 
-    def __init__(self, elem, browser, parent):
+    def __init__(self, elem, site, parent):
         super().__init__(Forum.fid, parent)
         Forum.fid += 1
         self.name = elem.xpath('div[1]/div[3]/span')[0].text.strip()
@@ -730,7 +862,7 @@ class Category(FObject):
                 name = name_elem.text.strip()
                 desc = f.xpath('div[2]')[0].text.strip()
                 url = urljoin(elem.base_url, name_elem.get('href'))
-                self.children.append(Forum(name, desc, url, browser, self))
+                self.children.append(Forum(name, desc, url, site, self))
         else:
             raise ValueError('Could not find any forums in {}'.format(
                     self.name))
@@ -745,7 +877,10 @@ class Category(FObject):
             forum.dump_mybb(db)
 
     def dump_phpbb(self, db):
-        raise NotImplementedError
+        table, row = self.format_phpbb()
+        db[table].append(row)
+        for forum in self.children:
+            forum.dump_phpbb(db)
 
     def format_mybb(self):
         row = [
@@ -794,25 +929,79 @@ class Category(FObject):
         return ('forums', row)
 
     def format_phpbb(self):
-        raise NotImplementedError
+        row = [
+            self.id,    # forum_id
+            0,          # parent_id
+            0,          # left_id
+            0,          # right_id
+            '',         # forum_parents
+            self.name,  # forum_name
+            '',         # forum_desc
+            '',         # forum_desc_bitfield
+            7,          # forum_desc_options
+            '',         # forum_desc_uid
+            '',         # forum_link
+            '',         # forum_password
+            0,          # forum_style
+            '',         # forum_image
+            '',         # forum_rules
+            '',         # forum_rules_link
+            '',         # forum_rules_bitfield
+            7,          # forum_rules_options
+            '',         # forum_rules_uid
+            0,          # forum_topics_per_page
+            0,          # forum_type: category
+            0,          # forum_status
+            0,          # forum_last_post_id
+            0,          # forum_last_poster_id
+            '',         # forum_last_post_subject
+            0,          # forum_last_post_time
+            '',         # forum_last_poster_name
+            '',         # forum_last_poster_colour
+            32,         # forum_flags
+            1,          # display_on_index
+            1,          # enable_indexing
+            1,          # enable_icons
+            0,          # enable_prune
+            0,          # prune_next
+            0,          # prune_days
+            0,          # prune_viewed
+            0,          # prune_freq
+            1,          # display_subforum_list
+            0,          # forum_options
+            0,          # enable_shadow_prune
+            7,          # prune_shadow_days
+            1,          # prune_shadow_freq
+            0,          # prune_shadow_next
+            0,          # forum_posts_approved
+            0,          # forum_posts_unapproved
+            0,          # forum_posts_softdeleted
+            0,          # forum_topics_approved
+            0,          # forum_topics_unapproved
+            0           # forum_topics_softdeleted
+        ]
+        return ('forums', row)
 
 
 class EnjinForum(FObject):
 
-    def __init__(self, url, browser, users):
+    def __init__(self, url, site, users):
         super().__init__(0, None)
         FObject.users = users
-        base_url = urljoin(url, '/')
-        page = html.fromstring(browser.page_source, base_url=base_url)
+        page = html.fromstring(site[url], urljoin(url, '/'))
         categories = page.xpath(
                 ('//div[contains(@class, "contentbox") and '
                  'contains(@class, "category")]'))
         if len(categories):
             for c in categories:
-                self.children.append(Category(c, browser, self))
+                self.children.append(Category(c, site, self))
         else:
             raise ValueError('Could not find any categories in {}'.format(url))
 
-    def dump(self, db):
+    def dump_mybb(self, db):
         for child in self.children:
             child.dump_mybb(db)
+
+    def dump_phpbb(self, db):
+        for child in self.children:
+            child.dump_phpbb(db)

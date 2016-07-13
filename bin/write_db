@@ -60,13 +60,25 @@ if args.dbtype == 'pgsql':
     query_as = 'ALTER SEQUENCE {} RESTART WITH {:d};'
     cur2 = conn.cursor()
     for seq in cur:
-        seqlst = seq[0].split('_')
-        table = seqlst[0] if len(seqlst) == 3 else seqlst[0] + seqlst[1]
-        pkey = seqlst[-2]
+        seq = seq[0]
+        seqlst = seq.split('_')
+        if seqlst[0] == 'phpbb':
+            table = seq[:seq.rfind('_')]
+            pkey_cur = conn.cursor()
+            pkey_cur.execute(
+                    ('SELECT a.attname, format_type(a.atttypid, a.atttypmod) '
+                     'AS data_type FROM pg_index i JOIN pg_attribute a ON '
+                     'a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) '
+                     'WHERE  i.indrelid = \'{}\'::regclass AND '
+                     'i.indisprimary;').format(table))
+            pkey = pkey_cur.fetchone()[0]
+        else:
+            table = seqlst[0] if len(seqlst) == 3 else seqlst[0] + seqlst[1]
+            pkey = seqlst[-2]
         cur2.execute(query_max.format(pkey, table))
         max_pkey = cur2.fetchone()[0]
         if max_pkey:
-            cur2.execute(query_as.format(seq[0], max_pkey + 1))
+            cur2.execute(query_as.format(seq, max_pkey + 1))
     conn.commit()
     cur2.close()
 
