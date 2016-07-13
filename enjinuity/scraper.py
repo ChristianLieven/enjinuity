@@ -152,5 +152,8 @@ class Scraper:
                 self.site[next_url] = html.tostring(next_page)
                 self._scrape_threads(next_page, next_url)
 
+    def get_site(self):
+        return self.site
+
     def dump(self, filename):
         pickle.dump(self.site, open(filename, 'wb'))

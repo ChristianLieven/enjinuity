@@ -206,6 +206,11 @@ class Users:
             self._format_mybb()
         pickle.dump(self.db, open(filename, 'wb'))
 
+    def get_map(self):
+        if not self.db:
+            raise RuntimeError('ERROR: Call a dump_xxx function first.')
+        return self.user_map
+
     def dump_map(self, filename):
         if not self.db:
             raise RuntimeError('ERROR: Call a dump_xxx function first.')
