@@ -14,7 +14,8 @@ here = path.abspath(path.dirname(__file__))
 
 requirements = [
     "lxml",
-    "selenium"
+    "selenium",
+    "PyMySQL"
 ]
 
 # Get the long description from the README file

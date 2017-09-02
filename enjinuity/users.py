@@ -19,9 +19,11 @@ from lxml import html
 from selenium import webdriver
 from urllib.parse import urljoin
 
+
 def random_string(length):
     return ''.join(random.SystemRandom().choice(string.ascii_lowercase +
         string.ascii_uppercase + string.digits) for _ in range(length))
+
 
 def md5(string):
     return hashlib.md5(string.encode()).hexdigest()
