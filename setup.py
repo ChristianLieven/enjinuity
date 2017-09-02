@@ -13,16 +13,8 @@ from os import path
 here = path.abspath(path.dirname(__file__))
 
 requirements = [
-    "hashlib",
-    "pickle",
-    "random",
-    "string",
-    "time",
     "lxml",
-    "selenium",
-    "urllib",
-    "calendar",
-    "datetime"
+    "selenium"
 ]
 
 # Get the long description from the README file
@@ -36,7 +28,7 @@ setup(
     long_description=readme,
     url='https://github.com/spikeh/enjinuity',
     author='David H. Wei',
-    author_email='',
+    author_email='nothing@nowhere.com',
     license='CC0',
     classifiers=[
         'Development Status :: 3 - Alpha',
